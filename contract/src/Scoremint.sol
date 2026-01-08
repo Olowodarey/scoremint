@@ -2,13 +2,77 @@
 // Compatible with OpenZeppelin Contracts ^5.5.0
 pragma solidity ^0.8.27;
 
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {
+    Initializable
+} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {
+    OwnableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {
+    PausableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {
+    UUPSUpgradeable
+} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ScoremintLib} from "./ScoremintLib.sol";
 
-contract Scoremint is Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuard {
+contract Scoremint is
+    Initializable,
+    PausableUpgradeable,
+    OwnableUpgradeable,
+    UUPSUpgradeable
+{
+    using SafeERC20 for IERC20;
+
+    // =============================================================
+    //                      REENTRANCY GUARD
+    // =============================================================
+
+    uint256 private _status;
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    /**
+     * @dev Prevents a contract from calling itself, directly or indirectly.
+     */
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    function _nonReentrantBefore() internal {
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+        _status = _ENTERED;
+    }
+
+    function _nonReentrantAfter() internal {
+        _status = _NOT_ENTERED;
+    }
+
+    // =============================================================
+    //                          STORAGE
+    // =============================================================
+
+    IERC20 public prizeToken; // USDC or other ERC20 token for prizes
+    address public oracle; // Trusted oracle for match results
+
+    uint256 public eventCounter;
+    uint256 public matchCounter;
+
+    // Event storage
+    mapping(uint256 => ScoremintLib.PredictionEvent) public events;
+    mapping(uint256 => ScoremintLib.Match) public matches;
+    mapping(address => uint256[]) public userEvents; // Events created by user
+
+    // =============================================================
+    //                      INITIALIZATION
+    // =============================================================
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -17,7 +81,12 @@ contract Scoremint is Initializable, PausableUpgradeable, OwnableUpgradeable, UU
     function initialize(address initialOwner) public initializer {
         __Pausable_init();
         __Ownable_init(initialOwner);
+        _status = _NOT_ENTERED; // Initialize reentrancy guard
     }
+
+    // =============================================================
+    //                      ADMIN FUNCTIONS
+    // =============================================================
 
     function pause() public onlyOwner {
         _pause();
@@ -27,9 +96,106 @@ contract Scoremint is Initializable, PausableUpgradeable, OwnableUpgradeable, UU
         _unpause();
     }
 
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        override
-        onlyOwner
-    {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
+
+    // =============================================================
+    //                          EVENTS
+    // =============================================================
+
+    event EventCreated(
+        uint256 indexed eventId,
+        address indexed creator,
+        string name,
+        uint256 prizePool,
+        uint64 deadline,
+        ScoremintLib.PredictionMode mode,
+        ScoremintLib.EventType eventType
+    );
+
+    // =============================================================
+    //                      WRITE FUNCTIONS
+    // =============================================================
+
+    /**
+     * @notice Create a new prediction event
+     * @param _name Name of the prediction event
+     * @param _deadline Deadline for predictions (unix timestamp)
+     * @param _mode Prediction mode (OUTCOME or EXACT_SCORE)
+     * @param _matchIds Array of match IDs for this event
+     * @param _eventType Event type (FREE or PAID)
+     * @param _prizePool Prize pool amount (0 for FREE events)
+     */
+    function createEvent(
+        string memory _name,
+        uint64 _deadline,
+        ScoremintLib.PredictionMode _mode,
+        uint256[] memory _matchIds,
+        ScoremintLib.EventType _eventType,
+        uint256 _prizePool
+    ) external payable whenNotPaused nonReentrant {
+        // Validations
+        require(bytes(_name).length > 0, "Event name cannot be empty");
+        require(_deadline > block.timestamp, "Deadline must be in the future");
+        require(
+            _matchIds.length > 0 &&
+                _matchIds.length <= ScoremintLib.MAX_MATCHES_PER_EVENT,
+            "Invalid number of matches"
+        );
+
+        // Validate all matches exist
+        for (uint256 i = 0; i < _matchIds.length; i++) {
+            require(_matchIds[i] < matchCounter, "Match does not exist");
+        }
+
+        uint256 finalPrizePool = 0;
+
+        // Handle prize pool based on event type
+        if (_eventType == ScoremintLib.EventType.PAID) {
+            require(
+                _prizePool > 0,
+                "Prize pool must be greater than 0 for PAID events"
+            );
+
+            // Transfer prize pool from creator
+            prizeToken.safeTransferFrom(msg.sender, address(this), _prizePool);
+            finalPrizePool = _prizePool;
+        } else {
+            // FREE event - no prize pool required
+            require(_prizePool == 0, "Prize pool must be 0 for FREE events");
+            require(
+                msg.value == 0,
+                "No native token should be sent for FREE events"
+            );
+        }
+
+        // Create event
+        uint256 eventId = eventCounter++;
+
+        events[eventId] = ScoremintLib.PredictionEvent({
+            eventId: eventId,
+            creator: msg.sender,
+            name: _name,
+            prizePool: finalPrizePool,
+            deadline: _deadline,
+            mode: _mode,
+            matchIds: _matchIds,
+            finalized: false,
+            totalParticipants: 0,
+            winners: new address[](0)
+        });
+
+        userEvents[msg.sender].push(eventId);
+
+        emit EventCreated(
+            eventId,
+            msg.sender,
+            _name,
+            finalPrizePool,
+            _deadline,
+            _mode,
+            _eventType
+        );
+    }
 }

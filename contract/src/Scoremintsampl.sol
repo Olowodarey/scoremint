@@ -35,6 +35,11 @@ contract Scoremint is Ownable, ReentrancyGuard, Pausable {
         SETTLED
     }
 
+    enum  EventType {
+      FREE,
+      PAID
+    }
+
     // =============================================================
     //                         STRUCTURES
     // =============================================================
