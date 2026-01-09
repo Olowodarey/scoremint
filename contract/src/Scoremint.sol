@@ -198,4 +198,120 @@ contract Scoremint is
             _eventType
         );
     }
+
+    // =============================================================
+    //                      VIEW FUNCTIONS
+    // =============================================================
+
+    /**
+     * @notice Get all active prediction events (deadline not yet passed)
+     * @return Array of active prediction events
+     */
+    function getAllEvents()
+        external
+        view
+        returns (ScoremintLib.PredictionEvent[] memory)
+    {
+        // First, count active events
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < eventCounter; i++) {
+            if (events[i].deadline > block.timestamp) {
+                activeCount++;
+            }
+        }
+
+        // Create array with exact size
+        ScoremintLib.PredictionEvent[]
+            memory activeEvents = new ScoremintLib.PredictionEvent[](
+                activeCount
+            );
+        uint256 currentIndex = 0;
+
+        for (uint256 i = 0; i < eventCounter; i++) {
+            if (events[i].deadline > block.timestamp) {
+                activeEvents[currentIndex] = events[i];
+                currentIndex++;
+            }
+        }
+
+        return activeEvents;
+    }
+
+    /**
+     * @notice Get all expired prediction events (deadline has passed)
+     * @return Array of expired prediction events
+     */
+    function getAllExpiredEvents()
+        external
+        view
+        returns (ScoremintLib.PredictionEvent[] memory)
+    {
+        // First, count expired events
+        uint256 expiredCount = 0;
+        for (uint256 i = 0; i < eventCounter; i++) {
+            if (events[i].deadline <= block.timestamp) {
+                expiredCount++;
+            }
+        }
+
+        // Create array with exact size
+        ScoremintLib.PredictionEvent[]
+            memory expiredEvents = new ScoremintLib.PredictionEvent[](
+                expiredCount
+            );
+        uint256 currentIndex = 0;
+
+        for (uint256 i = 0; i < eventCounter; i++) {
+            if (events[i].deadline <= block.timestamp) {
+                expiredEvents[currentIndex] = events[i];
+                currentIndex++;
+            }
+        }
+
+        return expiredEvents;
+    }
+
+    /**
+     * @notice Get all event IDs created by a user
+     * @param user Address of the user
+     * @return Array of event IDs created by the user
+     */
+    function getUserEventIds(
+        address user
+    ) external view returns (uint256[] memory) {
+        return userEvents[user];
+    }
+
+    /**
+     * @notice Get all prediction events created by a user
+     * @param user Address of the user
+     * @return Array of prediction events created by the user
+     */
+    function getUserCreatedEvents(
+        address user
+    ) external view returns (ScoremintLib.PredictionEvent[] memory) {
+        uint256[] memory eventIds = userEvents[user];
+        ScoremintLib.PredictionEvent[]
+            memory userCreatedEvents = new ScoremintLib.PredictionEvent[](
+                eventIds.length
+            );
+
+        for (uint256 i = 0; i < eventIds.length; i++) {
+            userCreatedEvents[i] = events[eventIds[i]];
+        }
+
+        return userCreatedEvents;
+    }
+
+    /**
+     * @notice Get a specific event by its ID
+     * @param eventId The ID of the event
+     * @return The prediction event
+     */
+    function getEvent(
+        uint256 eventId
+    ) external view returns (ScoremintLib.PredictionEvent memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        return events[eventId];
+    }
 }
