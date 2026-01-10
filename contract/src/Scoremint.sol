@@ -69,6 +69,11 @@ contract Scoremint is
     mapping(uint256 => ScoremintLib.Match) public matches;
     mapping(address => uint256[]) public userEvents; // Events created by user
 
+    // Prediction storage
+    mapping(uint256 => mapping(address => ScoremintLib.UserPrediction))
+        public userPredictions; // eventId => user => predictions
+    mapping(uint256 => mapping(address => bool)) public hasSubmitted; // eventId => user => has submitted
+
     // =============================================================
     //                      INITIALIZATION
     // =============================================================
@@ -112,6 +117,12 @@ contract Scoremint is
         uint64 deadline,
         ScoremintLib.PredictionMode mode,
         ScoremintLib.EventType eventType
+    );
+
+    event PredictionSubmitted(
+        uint256 indexed eventId,
+        address indexed user,
+        uint64 timestamp
     );
 
     // =============================================================
@@ -197,6 +208,84 @@ contract Scoremint is
             _mode,
             _eventType
         );
+    }
+
+    /**
+     * @notice Submit predictions for all matches in an event
+     * @param eventId The ID of the event
+     * @param predictions Array of predictions for each match in the event
+     */
+    function submitPredictions(
+        uint256 eventId,
+        ScoremintLib.Prediction[] memory predictions
+    ) external whenNotPaused nonReentrant {
+        // Validate event exists
+        require(eventId < eventCounter, "Event does not exist");
+
+        ScoremintLib.PredictionEvent storage eventData = events[eventId];
+
+        // Validate deadline hasn't passed
+        require(
+            block.timestamp < eventData.deadline,
+            "Event deadline has passed"
+        );
+
+        // Validate user hasn't already submitted
+        require(
+            !hasSubmitted[eventId][msg.sender],
+            "Already submitted predictions for this event"
+        );
+
+        // Validate predictions array length matches event's match count
+        require(
+            predictions.length == eventData.matchIds.length,
+            "Must submit predictions for all matches"
+        );
+
+        // Validate all predictions and match IDs
+        for (uint256 i = 0; i < predictions.length; i++) {
+            // Validate that the match ID exists in the event
+            bool matchFound = false;
+            for (uint256 j = 0; j < eventData.matchIds.length; j++) {
+                if (predictions[i].matchId == eventData.matchIds[j]) {
+                    matchFound = true;
+                    break;
+                }
+            }
+            require(matchFound, "Match ID not in event");
+
+            // Validate prediction type for OUTCOME mode
+            if (eventData.mode == ScoremintLib.PredictionMode.OUTCOME) {
+                require(
+                    predictions[i].outcome ==
+                        ScoremintLib.PredictionType.HOME_WIN ||
+                        predictions[i].outcome ==
+                        ScoremintLib.PredictionType.AWAY_WIN ||
+                        predictions[i].outcome ==
+                        ScoremintLib.PredictionType.DRAW,
+                    "Invalid prediction outcome"
+                );
+            }
+            // For EXACT_SCORE mode, scores are automatically valid as uint8 (0-255)
+        }
+
+        // Store user predictions
+        userPredictions[eventId][msg.sender] = ScoremintLib.UserPrediction({
+            user: msg.sender,
+            eventId: eventId,
+            submittedAt: uint64(block.timestamp),
+            predictions: predictions,
+            totalScore: 0,
+            claimed: false
+        });
+
+        // Mark user as having submitted
+        hasSubmitted[eventId][msg.sender] = true;
+
+        // Increment total participants
+        events[eventId].totalParticipants++;
+
+        emit PredictionSubmitted(eventId, msg.sender, uint64(block.timestamp));
     }
 
     // =============================================================
@@ -313,5 +402,36 @@ contract Scoremint is
     ) external view returns (ScoremintLib.PredictionEvent memory) {
         require(eventId < eventCounter, "Event does not exist");
         return events[eventId];
+    }
+
+    /**
+     * @notice Get user's predictions for a specific event
+     * @param eventId The ID of the event
+     * @param user Address of the user
+     * @return The user's prediction for the event
+     */
+    function getUserPredictions(
+        uint256 eventId,
+        address user
+    ) external view returns (ScoremintLib.UserPrediction memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        require(
+            hasSubmitted[eventId][user],
+            "User has not submitted predictions"
+        );
+        return userPredictions[eventId][user];
+    }
+
+    /**
+     * @notice Check if a user has submitted predictions for an event
+     * @param eventId The ID of the event
+     * @param user Address of the user
+     * @return True if user has submitted predictions, false otherwise
+     */
+    function hasUserSubmitted(
+        uint256 eventId,
+        address user
+    ) external view returns (bool) {
+        return hasSubmitted[eventId][user];
     }
 }

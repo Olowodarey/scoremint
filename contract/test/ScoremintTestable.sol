@@ -46,6 +46,11 @@ contract ScoremintTestable is
     mapping(uint256 => ScoremintLib.Match) public matches;
     mapping(address => uint256[]) public userEvents;
 
+    // Prediction storage
+    mapping(uint256 => mapping(address => ScoremintLib.UserPrediction))
+        public userPredictions;
+    mapping(uint256 => mapping(address => bool)) public hasSubmitted;
+
     // Remove the constructor that calls _disableInitializers()
     constructor() {
         // Empty constructor for testing
@@ -244,6 +249,98 @@ contract ScoremintTestable is
         ScoremintLib.PredictionMode mode,
         ScoremintLib.EventType eventType
     );
+
+    event PredictionSubmitted(
+        uint256 indexed eventId,
+        address indexed user,
+        uint64 timestamp
+    );
+
+    // Submit predictions for an event
+    function submitPredictions(
+        uint256 eventId,
+        ScoremintLib.Prediction[] memory predictions
+    ) external whenNotPaused nonReentrant {
+        require(eventId < eventCounter, "Event does not exist");
+
+        ScoremintLib.PredictionEvent storage eventData = events[eventId];
+
+        require(
+            block.timestamp < eventData.deadline,
+            "Event deadline has passed"
+        );
+
+        require(
+            !hasSubmitted[eventId][msg.sender],
+            "Already submitted predictions for this event"
+        );
+
+        require(
+            predictions.length == eventData.matchIds.length,
+            "Must submit predictions for all matches"
+        );
+
+        for (uint256 i = 0; i < predictions.length; i++) {
+            bool matchFound = false;
+            for (uint256 j = 0; j < eventData.matchIds.length; j++) {
+                if (predictions[i].matchId == eventData.matchIds[j]) {
+                    matchFound = true;
+                    break;
+                }
+            }
+            require(matchFound, "Match ID not in event");
+
+            if (eventData.mode == ScoremintLib.PredictionMode.OUTCOME) {
+                require(
+                    predictions[i].outcome ==
+                        ScoremintLib.PredictionType.HOME_WIN ||
+                        predictions[i].outcome ==
+                        ScoremintLib.PredictionType.AWAY_WIN ||
+                        predictions[i].outcome ==
+                        ScoremintLib.PredictionType.DRAW,
+                    "Invalid prediction outcome"
+                );
+            }
+        }
+
+        userPredictions[eventId][msg.sender] = ScoremintLib.UserPrediction({
+            user: msg.sender,
+            eventId: eventId,
+            submittedAt: uint64(block.timestamp),
+            predictions: predictions,
+            totalScore: 0,
+            claimed: false
+        });
+
+        hasSubmitted[eventId][msg.sender] = true;
+        events[eventId].totalParticipants++;
+
+        emit PredictionSubmitted(eventId, msg.sender, uint64(block.timestamp));
+    }
+
+    function getUserPredictions(
+        uint256 eventId,
+        address user
+    ) external view returns (ScoremintLib.UserPrediction memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        require(
+            hasSubmitted[eventId][user],
+            "User has not submitted predictions"
+        );
+        return userPredictions[eventId][user];
+    }
+
+    function hasUserSubmitted(
+        uint256 eventId,
+        address user
+    ) external view returns (bool) {
+        return hasSubmitted[eventId][user];
+    }
+
+    // Helper function for testing - set prize token
+    function setPrizeToken(address _prizeToken) external onlyOwner {
+        prizeToken = IERC20(_prizeToken);
+    }
 
     // Helper function for testing - create a match
     function createMatch(
