@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
 library ScoremintLib {
@@ -21,9 +22,9 @@ library ScoremintLib {
         SETTLED
     }
 
-    enum  EventType {
-      FREE,
-      PAID
+    enum EventType {
+        FREE,
+        PAID
     }
 
     enum EvetStatus {
@@ -80,6 +81,7 @@ library ScoremintLib {
         address playerAddress;
         uint256 totalPoints;
         uint256 eventsParticipated;
+        uint256 eventsCreated;
         uint256 eventsWon;
         uint256 totalEarnings;
     }
@@ -101,11 +103,16 @@ library ScoremintLib {
     /**
      * @dev Calculates the points for a user based on the number of predictions.
      */
-    function calculatePoints(uint256 _predictions) public pure returns (uint256) {
+    function calculatePoints(
+        uint256 _predictions
+    ) public pure returns (uint256) {
         return _predictions * POINTS_PER_PREDICTION;
     }
 
-    function calculateReward(uint256 _totalParticipants, uint256 _prizePool) public pure returns (uint256) {
+    function calculateReward(
+        uint256 _totalParticipants,
+        uint256 _prizePool
+    ) public pure returns (uint256) {
         return _prizePool / _totalParticipants;
     }
 }

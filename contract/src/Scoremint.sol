@@ -63,6 +63,7 @@ contract Scoremint is
 
     uint256 public eventCounter;
     uint256 public matchCounter;
+    uint256 public userCounter;
 
     // Event storage
     mapping(uint256 => ScoremintLib.PredictionEvent) public events;
@@ -73,6 +74,11 @@ contract Scoremint is
     mapping(uint256 => mapping(address => ScoremintLib.UserPrediction))
         public userPredictions; // eventId => user => predictions
     mapping(uint256 => mapping(address => bool)) public hasSubmitted; // eventId => user => has submitted
+
+    // User storage
+    mapping(address => ScoremintLib.User) public users; // user address => user data
+    mapping(address => uint256[]) public userParticipatedEvents; // user => event IDs participated
+    mapping(address => bool) public isRegisteredUser; // track if user is registered
 
     // =============================================================
     //                      INITIALIZATION
@@ -125,9 +131,38 @@ contract Scoremint is
         uint64 timestamp
     );
 
+    event UserRegistered(address indexed user, uint256 userId, string username);
+
     // =============================================================
     //                      WRITE FUNCTIONS
     // =============================================================
+
+    /**
+     * @notice Register a user with a username
+     * @param username The username for the user
+     */
+    function registerUser(string memory username) external whenNotPaused {
+        require(!isRegisteredUser[msg.sender], "User already registered");
+        require(bytes(username).length > 0, "Username cannot be empty");
+        require(bytes(username).length <= 32, "Username too long");
+
+        uint256 userId = userCounter++;
+
+        users[msg.sender] = ScoremintLib.User({
+            id: userId,
+            username: username,
+            playerAddress: msg.sender,
+            totalPoints: 0,
+            eventsParticipated: 0,
+            eventsCreated: 0,
+            eventsWon: 0,
+            totalEarnings: 0
+        });
+
+        isRegisteredUser[msg.sender] = true;
+
+        emit UserRegistered(msg.sender, userId, username);
+    }
 
     /**
      * @notice Create a new prediction event
@@ -181,6 +216,22 @@ contract Scoremint is
             );
         }
 
+        // Auto-register user if not registered
+        if (!isRegisteredUser[msg.sender]) {
+            uint256 userId = userCounter++;
+            users[msg.sender] = ScoremintLib.User({
+                id: userId,
+                username: "", // Empty username for auto-registered users
+                playerAddress: msg.sender,
+                totalPoints: 0,
+                eventsParticipated: 0,
+                eventsCreated: 0,
+                eventsWon: 0,
+                totalEarnings: 0
+            });
+            isRegisteredUser[msg.sender] = true;
+        }
+
         // Create event
         uint256 eventId = eventCounter++;
 
@@ -198,6 +249,9 @@ contract Scoremint is
         });
 
         userEvents[msg.sender].push(eventId);
+
+        // Increment user's events created counter
+        users[msg.sender].eventsCreated++;
 
         emit EventCreated(
             eventId,
@@ -269,6 +323,22 @@ contract Scoremint is
             // For EXACT_SCORE mode, scores are automatically valid as uint8 (0-255)
         }
 
+        // Auto-register user if not registered
+        if (!isRegisteredUser[msg.sender]) {
+            uint256 userId = userCounter++;
+            users[msg.sender] = ScoremintLib.User({
+                id: userId,
+                username: "", // Empty username for auto-registered users
+                playerAddress: msg.sender,
+                totalPoints: 0,
+                eventsParticipated: 0,
+                eventsCreated: 0,
+                eventsWon: 0,
+                totalEarnings: 0
+            });
+            isRegisteredUser[msg.sender] = true;
+        }
+
         // Store user predictions
         userPredictions[eventId][msg.sender] = ScoremintLib.UserPrediction({
             user: msg.sender,
@@ -284,6 +354,10 @@ contract Scoremint is
 
         // Increment total participants
         events[eventId].totalParticipants++;
+
+        // Update user participation stats
+        users[msg.sender].eventsParticipated++;
+        userParticipatedEvents[msg.sender].push(eventId);
 
         emit PredictionSubmitted(eventId, msg.sender, uint64(block.timestamp));
     }
@@ -433,5 +507,113 @@ contract Scoremint is
         address user
     ) external view returns (bool) {
         return hasSubmitted[eventId][user];
+    }
+
+    /**
+     * @notice Get user profile and stats
+     * @param user Address of the user
+     * @return The user's profile data
+     */
+    function getUserProfile(
+        address user
+    ) external view returns (ScoremintLib.User memory) {
+        require(isRegisteredUser[user], "User not registered");
+        return users[user];
+    }
+
+    /**
+     * @notice Get all event IDs a user has participated in
+     * @param user Address of the user
+     * @return Array of event IDs the user participated in
+     */
+    function getUserParticipatedEventIds(
+        address user
+    ) external view returns (uint256[] memory) {
+        return userParticipatedEvents[user];
+    }
+
+    /**
+     * @notice Get all events a user has participated in
+     * @param user Address of the user
+     * @return Array of prediction events the user participated in
+     */
+    function getUserParticipatedEvents(
+        address user
+    ) external view returns (ScoremintLib.PredictionEvent[] memory) {
+        uint256[] memory eventIds = userParticipatedEvents[user];
+        ScoremintLib.PredictionEvent[]
+            memory participatedEvents = new ScoremintLib.PredictionEvent[](
+                eventIds.length
+            );
+
+        for (uint256 i = 0; i < eventIds.length; i++) {
+            participatedEvents[i] = events[eventIds[i]];
+        }
+
+        return participatedEvents;
+    }
+
+    /**
+     * @notice Get user's total score from all events
+     * @param user Address of the user
+     * @return Total points accumulated by the user
+     */
+    function getUserTotalScore(address user) external view returns (uint256) {
+        require(isRegisteredUser[user], "User not registered");
+        return users[user].totalPoints;
+    }
+
+    /**
+     * @notice Get user's statistics
+     * @param user Address of the user
+     * @return eventsParticipated Number of events participated
+     * @return eventsCreated Number of events created
+     * @return eventsWon Number of events won
+     * @return totalPoints Total points accumulated
+     * @return totalEarnings Total earnings from prizes
+     */
+    function getUserStats(
+        address user
+    )
+        external
+        view
+        returns (
+            uint256 eventsParticipated,
+            uint256 eventsCreated,
+            uint256 eventsWon,
+            uint256 totalPoints,
+            uint256 totalEarnings
+        )
+    {
+        require(isRegisteredUser[user], "User not registered");
+        ScoremintLib.User memory userData = users[user];
+        return (
+            userData.eventsParticipated,
+            userData.eventsCreated,
+            userData.eventsWon,
+            userData.totalPoints,
+            userData.totalEarnings
+        );
+    }
+
+    /**
+     * @notice Check if a user is registered
+     * @param user Address of the user
+     * @return True if user is registered, false otherwise
+     */
+    function isUserRegistered(address user) external view returns (bool) {
+        return isRegisteredUser[user];
+    }
+
+    /**
+     * @notice Update user's username (only by the user themselves)
+     * @param newUsername The new username
+     */
+    function updateUsername(string memory newUsername) external whenNotPaused {
+        require(isRegisteredUser[msg.sender], "User not registered");
+        require(bytes(newUsername).length > 0, "Username cannot be empty");
+        require(bytes(newUsername).length <= 32, "Username too long");
+
+        users[msg.sender].username = newUsername;
     }
 }
