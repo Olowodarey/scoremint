@@ -86,13 +86,20 @@ library ScoremintLib {
         uint256 totalEarnings;
     }
 
+    struct LeaderboardEntry {
+        address user;
+        string username;
+        uint256 score;
+        uint256 rank;
+    }
+
     // =============================================================
     //                         Constants
     // =============================================================
 
-    uint256 public constant MAX_MATCHES_PER_EVENT = 10;
-    uint256 public constant MAX_PREDICTIONS_PER_USER = 10;
-    uint256 public constant MAX_PREDICTIONS_PER_EVENT = 10;
+    uint256 public constant MAX_MATCHES_PER_EVENT = 20;
+    uint256 public constant MAX_PREDICTIONS_PER_USER = 20;
+    uint256 public constant MAX_PREDICTIONS_PER_EVENT = 20;
     uint256 public constant MAX_USERS_PER_EVENT = 50;
 
     // Points awarded for correct predictions

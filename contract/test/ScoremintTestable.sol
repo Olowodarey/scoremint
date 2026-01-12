@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {Scoremint} from "../src/Scoremint.sol";
 import {ScoremintLib} from "../src/ScoremintLib.sol";
 import {
     Initializable

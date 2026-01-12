@@ -74,6 +74,7 @@ contract Scoremint is
     mapping(uint256 => mapping(address => ScoremintLib.UserPrediction))
         public userPredictions; // eventId => user => predictions
     mapping(uint256 => mapping(address => bool)) public hasSubmitted; // eventId => user => has submitted
+    mapping(uint256 => address[]) public eventParticipants; // eventId => list of participant addresses
 
     // User storage
     mapping(address => ScoremintLib.User) public users; // user address => user data
@@ -355,6 +356,9 @@ contract Scoremint is
         // Increment total participants
         events[eventId].totalParticipants++;
 
+        // Add to event participants list for leaderboard
+        eventParticipants[eventId].push(msg.sender);
+
         // Update user participation stats
         users[msg.sender].eventsParticipated++;
         userParticipatedEvents[msg.sender].push(eventId);
@@ -615,5 +619,148 @@ contract Scoremint is
         require(bytes(newUsername).length <= 32, "Username too long");
 
         users[msg.sender].username = newUsername;
+    }
+
+    // =============================================================
+    //                   LEADERBOARD FUNCTIONS
+    // =============================================================
+
+    /**
+     * @notice Get the leaderboard for a specific event (sorted by score)
+     * @param eventId The ID of the event
+     * @return leaderboard Array of leaderboard entries sorted by score (highest first)
+     */
+    function getEventLeaderboard(
+        uint256 eventId
+    )
+        external
+        view
+        returns (ScoremintLib.LeaderboardEntry[] memory leaderboard)
+    {
+        require(eventId < eventCounter, "Event does not exist");
+
+        address[] memory participants = eventParticipants[eventId];
+        uint256 participantCount = participants.length;
+
+        // Create leaderboard array
+        leaderboard = new ScoremintLib.LeaderboardEntry[](participantCount);
+
+        // Populate leaderboard with participant data
+        for (uint256 i = 0; i < participantCount; i++) {
+            address participant = participants[i];
+            uint256 score = userPredictions[eventId][participant].totalScore;
+            string memory username = isRegisteredUser[participant]
+                ? users[participant].username
+                : "";
+
+            leaderboard[i] = ScoremintLib.LeaderboardEntry({
+                user: participant,
+                username: username,
+                score: score,
+                rank: 0 // Will be set after sorting
+            });
+        }
+
+        // Sort leaderboard by score (bubble sort - simple for small arrays)
+        for (uint256 i = 0; i < participantCount; i++) {
+            for (uint256 j = i + 1; j < participantCount; j++) {
+                if (leaderboard[j].score > leaderboard[i].score) {
+                    // Swap
+                    ScoremintLib.LeaderboardEntry memory temp = leaderboard[i];
+                    leaderboard[i] = leaderboard[j];
+                    leaderboard[j] = temp;
+                }
+            }
+        }
+
+        // Assign ranks (handle ties by giving same rank)
+        uint256 currentRank = 1;
+        for (uint256 i = 0; i < participantCount; i++) {
+            if (i > 0 && leaderboard[i].score < leaderboard[i - 1].score) {
+                currentRank = i + 1;
+            }
+            leaderboard[i].rank = currentRank;
+        }
+
+        return leaderboard;
+    }
+
+    /**
+     * @notice Get all participant addresses and their scores for an event
+     * @param eventId The ID of the event
+     * @return participants Array of participant addresses
+     * @return scores Array of corresponding scores
+     */
+    function getEventParticipantScores(
+        uint256 eventId
+    )
+        external
+        view
+        returns (address[] memory participants, uint256[] memory scores)
+    {
+        require(eventId < eventCounter, "Event does not exist");
+
+        participants = eventParticipants[eventId];
+        scores = new uint256[](participants.length);
+
+        for (uint256 i = 0; i < participants.length; i++) {
+            scores[i] = userPredictions[eventId][participants[i]].totalScore;
+        }
+
+        return (participants, scores);
+    }
+
+    /**
+     * @notice Get the number of participants in an event
+     * @param eventId The ID of the event
+     * @return Number of participants
+     */
+    function getEventParticipantCount(
+        uint256 eventId
+    ) external view returns (uint256) {
+        require(eventId < eventCounter, "Event does not exist");
+        return eventParticipants[eventId].length;
+    }
+
+    /**
+     * @notice Get a user's rank in an event
+     * @param eventId The ID of the event
+     * @param user Address of the user
+     * @return rank The user's rank (1 = first place)
+     * @return score The user's score
+     */
+    function getUserRankInEvent(
+        uint256 eventId,
+        address user
+    ) external view returns (uint256 rank, uint256 score) {
+        require(eventId < eventCounter, "Event does not exist");
+        require(hasSubmitted[eventId][user], "User has not participated");
+
+        score = userPredictions[eventId][user].totalScore;
+        rank = 1;
+
+        // Count how many participants have a higher score
+        address[] memory participants = eventParticipants[eventId];
+        for (uint256 i = 0; i < participants.length; i++) {
+            uint256 participantScore = userPredictions[eventId][participants[i]]
+                .totalScore;
+            if (participantScore > score) {
+                rank++;
+            }
+        }
+
+        return (rank, score);
+    }
+
+    /**
+     * @notice Get all participants in an event
+     * @param eventId The ID of the event
+     * @return Array of participant addresses
+     */
+    function getEventParticipants(
+        uint256 eventId
+    ) external view returns (address[] memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        return eventParticipants[eventId];
     }
 }
