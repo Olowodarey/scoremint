@@ -868,6 +868,8 @@ contract Scoremint is
         }
 
         // Calculate and store rewards for each winner
+        uint256 totalDistributed = 0;
+
         for (uint256 i = 0; i < winnerCount; i++) {
             address winner = leaderboard[i].user;
             uint256 rank = leaderboard[i].rank;
@@ -880,9 +882,27 @@ contract Scoremint is
             );
 
             userRewards[eventId][winner] = reward;
+            totalDistributed += reward;
+        }
 
-            // Update user stats
-            users[winner].eventsWon++;
+        // SAFETY CHECK: If ties caused over-distribution, scale down proportionally
+        if (totalDistributed > eventData.prizePool) {
+            // Recalculate all rewards proportionally to fit within prize pool
+            for (uint256 i = 0; i < winnerCount; i++) {
+                address winner = leaderboard[i].user;
+                uint256 originalReward = userRewards[eventId][winner];
+
+                // Scale down: (originalReward * prizePool) / totalDistributed
+                uint256 scaledReward = (originalReward * eventData.prizePool) /
+                    totalDistributed;
+
+                userRewards[eventId][winner] = scaledReward;
+            }
+        }
+
+        // Update user stats for all winners
+        for (uint256 i = 0; i < winnerCount; i++) {
+            users[leaderboard[i].user].eventsWon++;
         }
 
         eventData.finalized = true;
