@@ -116,6 +116,27 @@ contract Scoremint is
         address newImplementation
     ) internal override onlyOwner {}
 
+    /**
+     * @notice Set the oracle address that can settle matches
+     * @param _oracle Address of the oracle
+     */
+    function setOracle(address _oracle) external onlyOwner {
+        require(_oracle != address(0), "Invalid oracle address");
+        oracle = _oracle;
+        emit OracleUpdated(_oracle);
+    }
+
+    /**
+     * @notice Set the prize token (USDC, USDT, etc.)
+     * @param _prizeToken Address of the ERC20 token to use for prizes
+     */
+    function setPrizeToken(address _prizeToken) external onlyOwner {
+        require(_prizeToken != address(0), "Invalid token address");
+        require(address(prizeToken) == address(0), "Prize token already set");
+        prizeToken = IERC20(_prizeToken);
+        emit PrizeTokenSet(_prizeToken);
+    }
+
     // =============================================================
     //                          EVENTS
     // =============================================================
@@ -137,6 +158,24 @@ contract Scoremint is
     );
 
     event UserRegistered(address indexed user, uint256 userId, string username);
+
+    event OracleUpdated(address indexed newOracle);
+
+    event PrizeTokenSet(address indexed tokenAddress);
+
+    event MatchCreated(
+        uint256 indexed matchId,
+        uint256 fixtureId,
+        string homeTeam,
+        string awayTeam,
+        uint64 matchTimestamp
+    );
+
+    event MatchSettled(
+        uint256 indexed matchId,
+        uint8 homeScore,
+        uint8 awayScore
+    );
 
     // =============================================================
     //                      WRITE FUNCTIONS
@@ -371,6 +410,129 @@ contract Scoremint is
         userParticipatedEvents[msg.sender].push(eventId);
 
         emit PredictionSubmitted(eventId, msg.sender, uint64(block.timestamp));
+    }
+
+    // =============================================================
+    //                  MATCH SETTLEMENT FUNCTIONS
+    // =============================================================
+
+    /**
+     * @notice Settle a single match with final scores (Oracle only)
+     * @param matchId The ID of the match to settle
+     * @param homeScore Final home team score
+     * @param awayScore Final away team score
+     */
+    function settleMatch(
+        uint256 matchId,
+        uint8 homeScore,
+        uint8 awayScore
+    ) external whenNotPaused {
+        require(msg.sender == oracle, "Only oracle can settle matches");
+        require(matchId < matchCounter, "Match does not exist");
+
+        ScoremintLib.Match storage matchData = matches[matchId];
+        require(
+            matchData.status == ScoremintLib.MatchStatus.PENDING,
+            "Match already settled"
+        );
+
+        // Update match with final scores
+        matchData.homeScore = homeScore;
+        matchData.awayScore = awayScore;
+        matchData.status = ScoremintLib.MatchStatus.SETTLED;
+
+        emit MatchSettled(matchId, homeScore, awayScore);
+    }
+
+    /**
+     * @notice Settle multiple matches in one transaction (Gas efficient for oracle)
+     * @param matchIds Array of match IDs to settle
+     * @param homeScores Array of home team scores
+     * @param awayScores Array of away team scores
+     */
+    function settleMatches(
+        uint256[] calldata matchIds,
+        uint8[] calldata homeScores,
+        uint8[] calldata awayScores
+    ) external whenNotPaused {
+        require(msg.sender == oracle, "Only oracle can settle matches");
+        require(
+            matchIds.length == homeScores.length &&
+                matchIds.length == awayScores.length,
+            "Array length mismatch"
+        );
+
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            uint256 matchId = matchIds[i];
+            require(matchId < matchCounter, "Match does not exist");
+
+            ScoremintLib.Match storage matchData = matches[matchId];
+            require(
+                matchData.status == ScoremintLib.MatchStatus.PENDING,
+                "Match already settled"
+            );
+
+            // Update match with final scores
+            matchData.homeScore = homeScores[i];
+            matchData.awayScore = awayScores[i];
+            matchData.status = ScoremintLib.MatchStatus.SETTLED;
+
+            emit MatchSettled(matchId, homeScores[i], awayScores[i]);
+        }
+    }
+
+    /**
+     * @notice Create a new match (for oracle or admin)
+     * @param _fixtureId External API fixture ID
+     * @param _homeTeam Name of home team
+     * @param _awayTeam Name of away team
+     * @param _matchTimestamp When the match will be played
+     * @return matchId The ID of the created match
+     */
+    function createMatch(
+        uint256 _fixtureId,
+        string memory _homeTeam,
+        string memory _awayTeam,
+        uint64 _matchTimestamp
+    ) external whenNotPaused returns (uint256) {
+        require(
+            msg.sender == oracle || msg.sender == owner(),
+            "Only oracle or owner"
+        );
+        require(bytes(_homeTeam).length > 0, "Home team name required");
+        require(bytes(_awayTeam).length > 0, "Away team name required");
+
+        uint256 matchId = matchCounter++;
+        matches[matchId] = ScoremintLib.Match({
+            fixtureId: _fixtureId,
+            homeTeam: _homeTeam,
+            awayTeam: _awayTeam,
+            matchTimestamp: _matchTimestamp,
+            homeScore: 0,
+            awayScore: 0,
+            status: ScoremintLib.MatchStatus.PENDING
+        });
+
+        emit MatchCreated(
+            matchId,
+            _fixtureId,
+            _homeTeam,
+            _awayTeam,
+            _matchTimestamp
+        );
+        return matchId;
+    }
+
+    /**
+     * @notice Get match details
+     * @param matchId The ID of the match
+     * @return The match data
+     */
+    function getMatch(
+        uint256 matchId
+    ) external view returns (ScoremintLib.Match memory) {
+        require(matchId < matchCounter, "Match does not exist");
+        return matches[matchId];
     }
 
     // =============================================================
