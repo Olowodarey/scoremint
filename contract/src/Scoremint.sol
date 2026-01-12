@@ -797,7 +797,45 @@ contract Scoremint is
             "Only creator or oracle can finalize"
         );
 
-        // Get leaderboard to determine winners
+        // STEP 1: Get all matches for this event
+        uint256[] memory matchIds = eventData.matchIds;
+        ScoremintLib.Match[] memory eventMatches = new ScoremintLib.Match[](
+            matchIds.length
+        );
+
+        // Load match data and verify all are settled
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            eventMatches[i] = matches[matchIds[i]];
+            require(
+                eventMatches[i].status == ScoremintLib.MatchStatus.SETTLED,
+                "All matches must be settled before finalizing"
+            );
+        }
+
+        // STEP 2: Calculate scores for all participants
+        address[] memory participants = eventParticipants[eventId];
+
+        for (uint256 i = 0; i < participants.length; i++) {
+            address participant = participants[i];
+            ScoremintLib.UserPrediction storage userPred = userPredictions[
+                eventId
+            ][participant];
+
+            // Calculate total score using the library function
+            uint256 score = ScoremintLib.calculateTotalPoints(
+                userPred.predictions,
+                eventMatches,
+                eventData.mode
+            );
+
+            // Store the calculated score
+            userPred.totalScore = score;
+
+            // Update user's global total points
+            users[participant].totalPoints += score;
+        }
+
+        // STEP 3: Get leaderboard (now with calculated scores)
         ScoremintLib.LeaderboardEntry[] memory leaderboard = this
             .getEventLeaderboard(eventId);
 
