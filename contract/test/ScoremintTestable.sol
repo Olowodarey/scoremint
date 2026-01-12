@@ -314,6 +314,9 @@ contract ScoremintTestable is
         hasSubmitted[eventId][msg.sender] = true;
         events[eventId].totalParticipants++;
 
+        // Add to event participants for leaderboard
+        eventParticipants[eventId].push(msg.sender);
+
         emit PredictionSubmitted(eventId, msg.sender, uint64(block.timestamp));
     }
 
@@ -359,5 +362,145 @@ contract ScoremintTestable is
             status: ScoremintLib.MatchStatus.PENDING
         });
         return matchId;
+    }
+
+    // Helper function for testing - set user prediction score
+    function setUserPredictionScore(
+        uint256 eventId,
+        address user,
+        uint256 score
+    ) external {
+        userPredictions[eventId][user].totalScore = score;
+    }
+
+    // Helper function for testing - register a user
+    function registerUser(string memory username) external {
+        require(!isRegisteredUser[msg.sender], "User already registered");
+        require(bytes(username).length > 0, "Username cannot be empty");
+
+        uint256 userId = userCounter++;
+        users[msg.sender] = ScoremintLib.User({
+            id: userId,
+            username: username,
+            playerAddress: msg.sender,
+            totalPoints: 0,
+            eventsParticipated: 0,
+            eventsCreated: 0,
+            eventsWon: 0,
+            totalEarnings: 0
+        });
+        isRegisteredUser[msg.sender] = true;
+    }
+
+    // Storage for user tracking (needs to be added to match main contract)
+    uint256 public userCounter;
+    mapping(address => ScoremintLib.User) public users;
+    mapping(address => uint256[]) public userParticipatedEvents;
+    mapping(address => bool) public isRegisteredUser;
+    mapping(uint256 => address[]) public eventParticipants;
+
+    // Leaderboard functions
+    function getEventLeaderboard(
+        uint256 eventId
+    )
+        external
+        view
+        returns (ScoremintLib.LeaderboardEntry[] memory leaderboard)
+    {
+        require(eventId < eventCounter, "Event does not exist");
+
+        address[] memory participants = eventParticipants[eventId];
+        uint256 participantCount = participants.length;
+
+        leaderboard = new ScoremintLib.LeaderboardEntry[](participantCount);
+
+        for (uint256 i = 0; i < participantCount; i++) {
+            address participant = participants[i];
+            uint256 score = userPredictions[eventId][participant].totalScore;
+            string memory username = isRegisteredUser[participant]
+                ? users[participant].username
+                : "";
+
+            leaderboard[i] = ScoremintLib.LeaderboardEntry({
+                user: participant,
+                username: username,
+                score: score,
+                rank: 0
+            });
+        }
+
+        // Sort by score
+        for (uint256 i = 0; i < participantCount; i++) {
+            for (uint256 j = i + 1; j < participantCount; j++) {
+                if (leaderboard[j].score > leaderboard[i].score) {
+                    ScoremintLib.LeaderboardEntry memory temp = leaderboard[i];
+                    leaderboard[i] = leaderboard[j];
+                    leaderboard[j] = temp;
+                }
+            }
+        }
+
+        // Assign ranks
+        uint256 currentRank = 1;
+        for (uint256 i = 0; i < participantCount; i++) {
+            if (i > 0 && leaderboard[i].score < leaderboard[i - 1].score) {
+                currentRank = i + 1;
+            }
+            leaderboard[i].rank = currentRank;
+        }
+
+        return leaderboard;
+    }
+
+    function getEventParticipantScores(
+        uint256 eventId
+    )
+        external
+        view
+        returns (address[] memory participants, uint256[] memory scores)
+    {
+        require(eventId < eventCounter, "Event does not exist");
+        participants = eventParticipants[eventId];
+        scores = new uint256[](participants.length);
+        for (uint256 i = 0; i < participants.length; i++) {
+            scores[i] = userPredictions[eventId][participants[i]].totalScore;
+        }
+        return (participants, scores);
+    }
+
+    function getEventParticipantCount(
+        uint256 eventId
+    ) external view returns (uint256) {
+        require(eventId < eventCounter, "Event does not exist");
+        return eventParticipants[eventId].length;
+    }
+
+    function getUserRankInEvent(
+        uint256 eventId,
+        address user
+    ) external view returns (uint256 rank, uint256 score) {
+        require(eventId < eventCounter, "Event does not exist");
+        require(hasSubmitted[eventId][user], "User has not participated");
+
+        score = userPredictions[eventId][user].totalScore;
+        rank = 1;
+
+        address[] memory participants = eventParticipants[eventId];
+        for (uint256 i = 0; i < participants.length; i++) {
+            uint256 participantScore = userPredictions[eventId][participants[i]]
+                .totalScore;
+            if (participantScore > score) {
+                rank++;
+            }
+        }
+
+        return (rank, score);
+    }
+
+    function getEventParticipants(
+        uint256 eventId
+    ) external view returns (address[] memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        return eventParticipants[eventId];
     }
 }
