@@ -95,6 +95,7 @@ contract ScoremintTestable is
         ScoremintLib.PredictionMode _mode,
         uint256[] memory _matchIds,
         ScoremintLib.EventType _eventType,
+        address _prizeToken,
         uint256 _prizePool
     ) external payable whenNotPaused nonReentrant {
         require(bytes(_name).length > 0, "Event name cannot be empty");
@@ -116,7 +117,12 @@ contract ScoremintTestable is
                 _prizePool > 0,
                 "Prize pool must be greater than 0 for PAID events"
             );
-            prizeToken.safeTransferFrom(msg.sender, address(this), _prizePool);
+            require(_prizeToken != address(0), "Invalid prize token address");
+            IERC20(_prizeToken).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _prizePool
+            );
             finalPrizePool = _prizePool;
         } else {
             require(_prizePool == 0, "Prize pool must be 0 for FREE events");
@@ -133,6 +139,7 @@ contract ScoremintTestable is
             creator: msg.sender,
             name: _name,
             prizePool: finalPrizePool,
+            prizeToken: _prizeToken,
             deadline: _deadline,
             mode: _mode,
             distributionType: ScoremintLib.DistributionType.WINNER_TAKE_ALL,

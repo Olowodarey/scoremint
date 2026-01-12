@@ -58,7 +58,6 @@ contract Scoremint is
     //                          STORAGE
     // =============================================================
 
-    IERC20 public prizeToken; // USDC or other ERC20 token for prizes
     address public oracle; // Trusted oracle for match results
 
     uint256 public eventCounter;
@@ -124,17 +123,6 @@ contract Scoremint is
         require(_oracle != address(0), "Invalid oracle address");
         oracle = _oracle;
         emit OracleUpdated(_oracle);
-    }
-
-    /**
-     * @notice Set the prize token (USDC, USDT, etc.)
-     * @param _prizeToken Address of the ERC20 token to use for prizes
-     */
-    function setPrizeToken(address _prizeToken) external onlyOwner {
-        require(_prizeToken != address(0), "Invalid token address");
-        require(address(prizeToken) == address(0), "Prize token already set");
-        prizeToken = IERC20(_prizeToken);
-        emit PrizeTokenSet(_prizeToken);
     }
 
     // =============================================================
@@ -215,6 +203,7 @@ contract Scoremint is
      * @param _mode Prediction mode (OUTCOME or EXACT_SCORE)
      * @param _matchIds Array of match IDs for this event
      * @param _eventType Event type (FREE or PAID)
+     * @param _prizeToken ERC20 token address for prizes (USDC, WETH, DAI, etc.)
      * @param _prizePool Prize pool amount (0 for FREE events)
      * @param _distributionType How prizes will be distributed (WINNER_TAKE_ALL, TOP_3, TOP_5, TOP_10)
      */
@@ -224,6 +213,7 @@ contract Scoremint is
         ScoremintLib.PredictionMode _mode,
         uint256[] memory _matchIds,
         ScoremintLib.EventType _eventType,
+        address _prizeToken,
         uint256 _prizePool,
         ScoremintLib.DistributionType _distributionType
     ) external payable whenNotPaused nonReentrant {
@@ -249,9 +239,14 @@ contract Scoremint is
                 _prizePool > 0,
                 "Prize pool must be greater than 0 for PAID events"
             );
+            require(_prizeToken != address(0), "Invalid prize token address");
 
-            // Transfer prize pool from creator
-            prizeToken.safeTransferFrom(msg.sender, address(this), _prizePool);
+            // Transfer prize pool from creator using specified token
+            IERC20(_prizeToken).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _prizePool
+            );
             finalPrizePool = _prizePool;
         } else {
             // FREE event - no prize pool required
@@ -286,6 +281,7 @@ contract Scoremint is
             creator: msg.sender,
             name: _name,
             prizePool: finalPrizePool,
+            prizeToken: _prizeToken,
             deadline: _deadline,
             mode: _mode,
             distributionType: _distributionType,
@@ -795,9 +791,10 @@ contract Scoremint is
     // =============================================================
 
     /**
-     * @notice Get the leaderboard for a specific event (sorted by score)
+     * @notice Get the top 10 leaderboard for a specific event (sorted by score)
      * @param eventId The ID of the event
-     * @return leaderboard Array of leaderboard entries sorted by score (highest first)
+     * @return leaderboard Array of top 10 leaderboard entries sorted by score (highest first)
+     * @dev Gas optimized - only returns top 10 to save gas costs
      */
     function getEventLeaderboard(
         uint256 eventId
@@ -811,10 +808,16 @@ contract Scoremint is
         address[] memory participants = eventParticipants[eventId];
         uint256 participantCount = participants.length;
 
-        // Create leaderboard array
-        leaderboard = new ScoremintLib.LeaderboardEntry[](participantCount);
+        // Determine how many entries to return (max 10)
+        uint256 leaderboardSize = participantCount > 10 ? 10 : participantCount;
 
-        // Populate leaderboard with participant data
+        // Create array for top 10 (or fewer if less than 10 participants)
+        ScoremintLib.LeaderboardEntry[]
+            memory allEntries = new ScoremintLib.LeaderboardEntry[](
+                participantCount
+            );
+
+        // Populate all entries
         for (uint256 i = 0; i < participantCount; i++) {
             address participant = participants[i];
             uint256 score = userPredictions[eventId][participant].totalScore;
@@ -822,29 +825,44 @@ contract Scoremint is
                 ? users[participant].username
                 : "";
 
-            leaderboard[i] = ScoremintLib.LeaderboardEntry({
+            allEntries[i] = ScoremintLib.LeaderboardEntry({
                 user: participant,
                 username: username,
                 score: score,
-                rank: 0 // Will be set after sorting
+                rank: 0
             });
         }
 
-        // Sort leaderboard by score (bubble sort - simple for small arrays)
-        for (uint256 i = 0; i < participantCount; i++) {
+        // Partial sort: only sort enough to get top 10
+        // Using selection sort to find top N efficiently
+        for (uint256 i = 0; i < leaderboardSize; i++) {
+            uint256 maxIndex = i;
+
+            // Find the participant with highest score in remaining
             for (uint256 j = i + 1; j < participantCount; j++) {
-                if (leaderboard[j].score > leaderboard[i].score) {
-                    // Swap
-                    ScoremintLib.LeaderboardEntry memory temp = leaderboard[i];
-                    leaderboard[i] = leaderboard[j];
-                    leaderboard[j] = temp;
+                if (allEntries[j].score > allEntries[maxIndex].score) {
+                    maxIndex = j;
                 }
+            }
+
+            // Swap if needed
+            if (maxIndex != i) {
+                ScoremintLib.LeaderboardEntry memory temp = allEntries[i];
+                allEntries[i] = allEntries[maxIndex];
+                allEntries[maxIndex] = temp;
             }
         }
 
-        // Assign ranks (handle ties by giving same rank)
+        // Create final leaderboard array with only top entries
+        leaderboard = new ScoremintLib.LeaderboardEntry[](leaderboardSize);
+
+        for (uint256 i = 0; i < leaderboardSize; i++) {
+            leaderboard[i] = allEntries[i];
+        }
+
+        // Assign ranks (handle ties)
         uint256 currentRank = 1;
-        for (uint256 i = 0; i < participantCount; i++) {
+        for (uint256 i = 0; i < leaderboardSize; i++) {
             if (i > 0 && leaderboard[i].score < leaderboard[i - 1].score) {
                 currentRank = i + 1;
             }
@@ -1093,8 +1111,8 @@ contract Scoremint is
         // Update user total earnings
         users[msg.sender].totalEarnings += reward;
 
-        // Transfer reward
-        prizeToken.safeTransfer(msg.sender, reward);
+        // Transfer reward using event's prize token
+        IERC20(eventData.prizeToken).safeTransfer(msg.sender, reward);
 
         emit RewardClaimed(eventId, msg.sender, reward);
     }

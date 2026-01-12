@@ -58,6 +58,7 @@ library ScoremintLib {
         address creator;
         string name;
         uint256 prizePool;
+        address prizeToken; // ERC20 token for prizes (USDC, WETH, DAI, etc.)
         uint64 deadline;
         PredictionMode mode;
         DistributionType distributionType;
