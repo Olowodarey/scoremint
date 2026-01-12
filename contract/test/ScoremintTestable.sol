@@ -135,6 +135,7 @@ contract ScoremintTestable is
             prizePool: finalPrizePool,
             deadline: _deadline,
             mode: _mode,
+            distributionType: ScoremintLib.DistributionType.WINNER_TAKE_ALL,
             matchIds: _matchIds,
             finalized: false,
             totalParticipants: 0,

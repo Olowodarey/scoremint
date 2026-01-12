@@ -81,6 +81,10 @@ contract Scoremint is
     mapping(address => uint256[]) public userParticipatedEvents; // user => event IDs participated
     mapping(address => bool) public isRegisteredUser; // track if user is registered
 
+    // Prize claim tracking
+    mapping(uint256 => mapping(address => bool)) public hasClaimed; // event ID => user => has claimed
+    mapping(uint256 => mapping(address => uint256)) public userRewards; // eventId => user => reward amount
+
     // =============================================================
     //                      INITIALIZATION
     // =============================================================
@@ -173,6 +177,7 @@ contract Scoremint is
      * @param _matchIds Array of match IDs for this event
      * @param _eventType Event type (FREE or PAID)
      * @param _prizePool Prize pool amount (0 for FREE events)
+     * @param _distributionType How prizes will be distributed (WINNER_TAKE_ALL, TOP_3, TOP_5, TOP_10)
      */
     function createEvent(
         string memory _name,
@@ -180,7 +185,8 @@ contract Scoremint is
         ScoremintLib.PredictionMode _mode,
         uint256[] memory _matchIds,
         ScoremintLib.EventType _eventType,
-        uint256 _prizePool
+        uint256 _prizePool,
+        ScoremintLib.DistributionType _distributionType
     ) external payable whenNotPaused nonReentrant {
         // Validations
         require(bytes(_name).length > 0, "Event name cannot be empty");
@@ -243,6 +249,7 @@ contract Scoremint is
             prizePool: finalPrizePool,
             deadline: _deadline,
             mode: _mode,
+            distributionType: _distributionType,
             matchIds: _matchIds,
             finalized: false,
             totalParticipants: 0,
@@ -763,4 +770,166 @@ contract Scoremint is
         require(eventId < eventCounter, "Event does not exist");
         return eventParticipants[eventId];
     }
+
+    // =============================================================
+    //                   PRIZE DISTRIBUTION FUNCTIONS
+    // =============================================================
+
+    /**
+     * @notice Finalize an event and calculate winner rewards
+     * @param eventId The ID of the event to finalize
+     * @dev Can only be called by the event creator or oracle after deadline
+     */
+    function finalizeEvent(
+        uint256 eventId
+    ) external whenNotPaused nonReentrant {
+        require(eventId < eventCounter, "Event does not exist");
+
+        ScoremintLib.PredictionEvent storage eventData = events[eventId];
+
+        require(!eventData.finalized, "Event already finalized");
+        require(
+            block.timestamp > eventData.deadline,
+            "Event deadline has not passed"
+        );
+        require(
+            msg.sender == eventData.creator || msg.sender == oracle,
+            "Only creator or oracle can finalize"
+        );
+
+        // Get leaderboard to determine winners
+        ScoremintLib.LeaderboardEntry[] memory leaderboard = this
+            .getEventLeaderboard(eventId);
+
+        // Determine number of winners based on distribution type
+        uint256 maxWinners = ScoremintLib.getWinnerCount(
+            eventData.distributionType
+        );
+
+        // Cap at actual number of participants
+        uint256 actualWinners = maxWinners < leaderboard.length
+            ? maxWinners
+            : leaderboard.length;
+
+        // Only count participants with score > 0 as winners
+        uint256 winnerCount = 0;
+        for (uint256 i = 0; i < actualWinners; i++) {
+            if (leaderboard[i].score > 0) {
+                winnerCount++;
+            } else {
+                break; // Leaderboard is sorted, so we can stop here
+            }
+        }
+
+        require(winnerCount > 0, "No valid winners");
+
+        // Store winners
+        delete eventData.winners; // Clear existing winners array
+        for (uint256 i = 0; i < winnerCount; i++) {
+            eventData.winners.push(leaderboard[i].user);
+        }
+
+        // Calculate and store rewards for each winner
+        for (uint256 i = 0; i < winnerCount; i++) {
+            address winner = leaderboard[i].user;
+            uint256 rank = leaderboard[i].rank;
+
+            // Calculate reward based on rank
+            uint256 reward = ScoremintLib.calculateRewardForRank(
+                eventData.prizePool,
+                eventData.distributionType,
+                rank
+            );
+
+            userRewards[eventId][winner] = reward;
+
+            // Update user stats
+            users[winner].eventsWon++;
+        }
+
+        eventData.finalized = true;
+
+        emit EventFinalized(eventId, winnerCount, eventData.prizePool);
+    }
+
+    /**
+     * @notice Claim reward for a finalized event
+     * @param eventId The ID of the event
+     */
+    function claimReward(uint256 eventId) external whenNotPaused nonReentrant {
+        require(eventId < eventCounter, "Event does not exist");
+
+        ScoremintLib.PredictionEvent storage eventData = events[eventId];
+
+        require(eventData.finalized, "Event not finalized");
+        require(!hasClaimed[eventId][msg.sender], "Reward already claimed");
+
+        uint256 reward = userRewards[eventId][msg.sender];
+        require(reward > 0, "No reward to claim");
+
+        // Mark as claimed
+        hasClaimed[eventId][msg.sender] = true;
+
+        // Update user total earnings
+        users[msg.sender].totalEarnings += reward;
+
+        // Transfer reward
+        prizeToken.safeTransfer(msg.sender, reward);
+
+        emit RewardClaimed(eventId, msg.sender, reward);
+    }
+
+    /**
+     * @notice Get reward amount for a user in an event
+     * @param eventId The ID of the event
+     * @param user The user address
+     * @return reward The reward amount
+     */
+    function getUserReward(
+        uint256 eventId,
+        address user
+    ) external view returns (uint256 reward) {
+        return userRewards[eventId][user];
+    }
+
+    /**
+     * @notice Check if a user has claimed their reward
+     * @param eventId The ID of the event
+     * @param user The user address
+     * @return Whether the user has claimed
+     */
+    function hasUserClaimed(
+        uint256 eventId,
+        address user
+    ) external view returns (bool) {
+        return hasClaimed[eventId][user];
+    }
+
+    /**
+     * @notice Get all winners for an event
+     * @param eventId The ID of the event
+     * @return Array of winner addresses
+     */
+    function getEventWinners(
+        uint256 eventId
+    ) external view returns (address[] memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        return events[eventId].winners;
+    }
+
+    // =============================================================
+    //                         EVENTS
+    // =============================================================
+
+    event EventFinalized(
+        uint256 indexed eventId,
+        uint256 winnerCount,
+        uint256 totalPrizePool
+    );
+
+    event RewardClaimed(
+        uint256 indexed eventId,
+        address indexed user,
+        uint256 amount
+    );
 }

@@ -32,6 +32,13 @@ library ScoremintLib {
         EXPIRED
     }
 
+    enum DistributionType {
+        WINNER_TAKE_ALL, // 1st place gets 100%
+        TOP_3, // Top 3 share prizes
+        TOP_5, // Top 5 share prizes
+        TOP_10 // Top 10 share prizes
+    }
+
     // =============================================================
     //                         STRUCTS
     // =============================================================
@@ -53,6 +60,7 @@ library ScoremintLib {
         uint256 prizePool;
         uint64 deadline;
         PredictionMode mode;
+        DistributionType distributionType;
         uint256[] matchIds;
         bool finalized;
         uint256 totalParticipants;
@@ -188,16 +196,80 @@ library ScoremintLib {
     }
 
     /**
-     * @dev Calculates the reward per winner
-     * @param _totalWinners Number of winners
-     * @param _prizePool Total prize pool
-     * @return reward The reward amount per winner
+     * @dev Get the number of winners based on distribution type
+     * @param distributionType The distribution type
+     * @return Number of winners
      */
-    function calculateReward(
-        uint256 _totalWinners,
-        uint256 _prizePool
+    function getWinnerCount(
+        DistributionType distributionType
     ) public pure returns (uint256) {
-        require(_totalWinners > 0, "No winners");
-        return _prizePool / _totalWinners;
+        if (distributionType == DistributionType.WINNER_TAKE_ALL) return 1;
+        if (distributionType == DistributionType.TOP_3) return 3;
+        if (distributionType == DistributionType.TOP_5) return 5;
+        if (distributionType == DistributionType.TOP_10) return 10;
+        return 1;
+    }
+
+    /**
+     * @dev Get distribution percentage for a specific rank
+     * @param distributionType The distribution type
+     * @param rank The rank (1-indexed, 1 = first place)
+     * @return Percentage (out of 100) for this rank
+     */
+    function getDistributionPercentage(
+        DistributionType distributionType,
+        uint256 rank
+    ) public pure returns (uint256) {
+        if (distributionType == DistributionType.WINNER_TAKE_ALL) {
+            return rank == 1 ? 100 : 0;
+        }
+
+        if (distributionType == DistributionType.TOP_3) {
+            if (rank == 1) return 50;
+            if (rank == 2) return 30;
+            if (rank == 3) return 20;
+            return 0;
+        }
+
+        if (distributionType == DistributionType.TOP_5) {
+            if (rank == 1) return 30;
+            if (rank == 2) return 25;
+            if (rank == 3) return 20;
+            if (rank == 4) return 15;
+            if (rank == 5) return 10;
+            return 0;
+        }
+
+        if (distributionType == DistributionType.TOP_10) {
+            if (rank == 1) return 19;
+            if (rank == 2) return 17;
+            if (rank == 3) return 15;
+            if (rank == 4) return 13;
+            if (rank == 5) return 11;
+            if (rank == 6) return 9;
+            if (rank == 7) return 7;
+            if (rank == 8) return 5;
+            if (rank == 9) return 3;
+            if (rank == 10) return 1;
+            return 0;
+        }
+
+        return 0;
+    }
+
+    /**
+     * @dev Calculate reward amount for a specific rank
+     * @param prizePool Total prize pool
+     * @param distributionType The distribution type
+     * @param rank The rank (1-indexed)
+     * @return Reward amount for this rank
+     */
+    function calculateRewardForRank(
+        uint256 prizePool,
+        DistributionType distributionType,
+        uint256 rank
+    ) public pure returns (uint256) {
+        uint256 percentage = getDistributionPercentage(distributionType, rank);
+        return (prizePool * percentage) / 100;
     }
 }
