@@ -83,6 +83,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0 // no prize pool for FREE events
         );
 
@@ -112,6 +113,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -121,6 +123,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.EXACT_SCORE,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         vm.stopPrank();
@@ -133,6 +136,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -157,6 +161,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -166,6 +171,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.EXACT_SCORE,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -175,6 +181,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -207,6 +214,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -216,6 +224,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.EXACT_SCORE,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -225,6 +234,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -262,6 +272,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         scoremint.createEvent(
@@ -270,6 +281,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         vm.stopPrank();
@@ -282,6 +294,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
 
@@ -310,6 +323,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         scoremint.createEvent(
@@ -318,6 +332,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.EXACT_SCORE,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         vm.stopPrank();
@@ -348,6 +363,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
     }
@@ -364,6 +380,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
     }
@@ -379,6 +396,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
     }
@@ -406,6 +424,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         scoremint.createEvent(
@@ -414,6 +433,7 @@ contract ScoremintTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         vm.stopPrank();

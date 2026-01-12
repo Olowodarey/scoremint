@@ -84,6 +84,7 @@ contract LeaderboardTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         return 0; // First event
@@ -354,6 +355,7 @@ contract LeaderboardTest is Test {
             ScoremintLib.PredictionMode.OUTCOME,
             matchIds,
             ScoremintLib.EventType.FREE,
+            address(0), // No prize token for FREE events
             0
         );
         uint256 emptyEventId = 1;
