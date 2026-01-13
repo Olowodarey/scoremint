@@ -92,14 +92,14 @@ export class OracleService {
 
       // Parse MatchCreated event
       const event = receipt.logs
-        .map((log: any) => {
+        .map((log: ethers.Log) => {
           try {
             return this.contract.interface.parseLog(log);
           } catch {
             return null;
           }
         })
-        .find((e: any) => e?.name === "MatchCreated");
+        .find((e: ethers.LogDescription | null) => e?.name === "MatchCreated");
 
       if (!event) {
         throw new Error("MatchCreated event not found in transaction");

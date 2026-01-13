@@ -36,8 +36,8 @@ export default function CreatePrediction() {
   const { address, isConnected } = useAccount();
   const {
     createMatch,
-    isPending: isCreatingMatch,
-    isConfirmed: matchCreated,
+    isPending: _isCreatingMatch,
+    isConfirmed: _matchCreated,
     matchCounter,
   } = useMatchCreation();
   const {
@@ -51,7 +51,6 @@ export default function CreatePrediction() {
 
   // Transaction state
   const [txStatus, setTxStatus] = useState<string>("");
-  const [createdMatchIds, setCreatedMatchIds] = useState<bigint[]>([]);
 
   // Top leagues configuration
   const topLeagues = [
@@ -181,7 +180,6 @@ export default function CreatePrediction() {
         matchIds.push(startingMatchId + BigInt(i));
       }
 
-      setCreatedMatchIds(matchIds);
       setTxStatus("Matches created! Now creating event...");
 
       // Step 2: Create the event

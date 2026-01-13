@@ -2,7 +2,10 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useReadContract,
+  useSwitchChain,
+  useChainId,
 } from "wagmi";
+import { base } from "wagmi/chains";
 import ScoremintABI from "./ScoremintABI.json";
 
 const CONTRACT_ADDRESS = process.env
@@ -17,6 +20,8 @@ export interface CreateMatchParams {
 
 export function useMatchCreation() {
   const { data: hash, writeContract, isPending, error } = useWriteContract();
+  const { switchChain } = useSwitchChain();
+  const chainId = useChainId();
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } =
     useWaitForTransactionReceipt({
@@ -33,6 +38,12 @@ export function useMatchCreation() {
   const createMatch = async (params: CreateMatchParams) => {
     if (!CONTRACT_ADDRESS) {
       throw new Error("Contract address not configured");
+    }
+
+    // Check if we're on the correct network (Base = 8453)
+    if (chainId !== base.id) {
+      console.log("Switching to Base network...");
+      await switchChain({ chainId: base.id });
     }
 
     return writeContract({

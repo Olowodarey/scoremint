@@ -33,7 +33,7 @@ export function readMatchMappings(): MatchMappingsData {
   try {
     const data = fs.readFileSync(DATA_PATH, "utf-8");
     return JSON.parse(data);
-  } catch (error) {
+  } catch {
     // Return empty structure if file doesn't exist
     return {
       mappings: {},
