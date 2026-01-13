@@ -287,7 +287,7 @@ export default function CreatePrediction() {
                 step="0.01"
               />
               <p className="text-xs text-gray-400 mt-2">
-                💡 You'll need to approve USDC spending before creating the
+                💡 You&apos;ll need to approve USDC spending before creating the
                 event
               </p>
             </div>
