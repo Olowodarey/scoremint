@@ -19,12 +19,14 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ScoremintLib} from "./ScoremintLib.sol";
+import {IScoremintEvents} from "./interfaces/IScoremintEvents.sol";
 
 contract Scoremint is
     Initializable,
     PausableUpgradeable,
     OwnableUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    IScoremintEvents
 {
     using SafeERC20 for IERC20;
 
@@ -125,45 +127,7 @@ contract Scoremint is
         emit OracleUpdated(_oracle);
     }
 
-    // =============================================================
-    //                          EVENTS
-    // =============================================================
-
-    event EventCreated(
-        uint256 indexed eventId,
-        address indexed creator,
-        string name,
-        uint256 prizePool,
-        uint64 deadline,
-        ScoremintLib.PredictionMode mode,
-        ScoremintLib.EventType eventType
-    );
-
-    event PredictionSubmitted(
-        uint256 indexed eventId,
-        address indexed user,
-        uint64 timestamp
-    );
-
-    event UserRegistered(address indexed user, uint256 userId, string username);
-
-    event OracleUpdated(address indexed newOracle);
-
-    event PrizeTokenSet(address indexed tokenAddress);
-
-    event MatchCreated(
-        uint256 indexed matchId,
-        uint256 fixtureId,
-        string homeTeam,
-        string awayTeam,
-        uint64 matchTimestamp
-    );
-
-    event MatchSettled(
-        uint256 indexed matchId,
-        uint8 homeScore,
-        uint8 awayScore
-    );
+    // Events are now defined in IScoremintEvents interface
 
     // =============================================================
     //                      WRITE FUNCTIONS
@@ -1154,20 +1118,4 @@ contract Scoremint is
         require(eventId < eventCounter, "Event does not exist");
         return events[eventId].winners;
     }
-
-    // =============================================================
-    //                         EVENTS
-    // =============================================================
-
-    event EventFinalized(
-        uint256 indexed eventId,
-        uint256 winnerCount,
-        uint256 totalPrizePool
-    );
-
-    event RewardClaimed(
-        uint256 indexed eventId,
-        address indexed user,
-        uint256 amount
-    );
 }

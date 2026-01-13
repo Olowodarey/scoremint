@@ -1,0 +1,8 @@
+{
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "implementation": "0xF2C3737e7D92424799971661c34bC44662246313",
+  "proxy": "0xedA3b2C3c43aAE98dF94bf8149b96407C026931c",
+  "owner": "0x778DB78469FE2341917317c8aD32552E9C085409",
+  "oracle": "0x778DB78469FE2341917317c8aD32552E9C085409"
+}
