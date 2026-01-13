@@ -2,18 +2,11 @@
 // Compatible with OpenZeppelin Contracts ^5.5.0
 pragma solidity ^0.8.27;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {
-    Initializable
-} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {
-    OwnableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {
-    PausableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {
-    UUPSUpgradeable
-} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -21,40 +14,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ScoremintLib} from "./ScoremintLib.sol";
 import {IScoremintEvents} from "./interfaces/IScoremintEvents.sol";
 
-contract Scoremint is
-    Initializable,
-    PausableUpgradeable,
-    OwnableUpgradeable,
-    UUPSUpgradeable,
-    IScoremintEvents
-{
+contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
     using SafeERC20 for IERC20;
-
-    // =============================================================
-    //                      REENTRANCY GUARD
-    // =============================================================
-
-    uint256 private _status;
-    uint256 private constant _NOT_ENTERED = 1;
-    uint256 private constant _ENTERED = 2;
-
-    /**
-     * @dev Prevents a contract from calling itself, directly or indirectly.
-     */
-    modifier nonReentrant() {
-        _nonReentrantBefore();
-        _;
-        _nonReentrantAfter();
-    }
-
-    function _nonReentrantBefore() internal {
-        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
-        _status = _ENTERED;
-    }
-
-    function _nonReentrantAfter() internal {
-        _status = _NOT_ENTERED;
-    }
 
     // =============================================================
     //                          STORAGE
@@ -90,16 +51,7 @@ contract Scoremint is
     //                      INITIALIZATION
     // =============================================================
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-
-    function initialize(address initialOwner) public initializer {
-        __Pausable_init();
-        __Ownable_init(initialOwner);
-        _status = _NOT_ENTERED; // Initialize reentrancy guard
-    }
+    constructor(address initialOwner) Ownable(initialOwner) {}
 
     // =============================================================
     //                      ADMIN FUNCTIONS
@@ -112,10 +64,6 @@ contract Scoremint is
     function unpause() public onlyOwner {
         _unpause();
     }
-
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
 
     /**
      * @notice Set the oracle address that can settle matches

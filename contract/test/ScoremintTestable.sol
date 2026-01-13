@@ -2,40 +2,23 @@
 pragma solidity ^0.8.27;
 
 import {ScoremintLib} from "../src/ScoremintLib.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {
-    Initializable
-} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {
-    OwnableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {
-    PausableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {
-    UUPSUpgradeable
-} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
- * @notice Test version of Scoremint that removes the constructor initialization blocker
- * This allows the contract to be initialized in test environments without a proxy
+ * @notice Test version of Scoremint with same structure as main contract
  */
-contract ScoremintTestable is
-    Initializable,
-    PausableUpgradeable,
-    OwnableUpgradeable,
-    UUPSUpgradeable
-{
+contract ScoremintTestable is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // Copy all storage variables from Scoremint
-    uint256 private _status;
-    uint256 private constant _NOT_ENTERED = 1;
-    uint256 private constant _ENTERED = 2;
-
     IERC20 public prizeToken;
     address public oracle;
     uint256 public eventCounter;
@@ -50,31 +33,12 @@ contract ScoremintTestable is
         public userPredictions;
     mapping(uint256 => mapping(address => bool)) public hasSubmitted;
 
-    // Remove the constructor that calls _disableInitializers()
-    constructor() {
-        // Empty constructor for testing
-    }
+    constructor(address initialOwner) Ownable(initialOwner) {}
 
-    function initialize(address initialOwner) public initializer {
-        __Pausable_init();
-        __Ownable_init(initialOwner);
-        _status = _NOT_ENTERED;
-    }
-
-    // Copy all modifiers and functions from Scoremint
-    modifier nonReentrant() {
-        _nonReentrantBefore();
-        _;
-        _nonReentrantAfter();
-    }
-
-    function _nonReentrantBefore() internal {
-        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
-        _status = _ENTERED;
-    }
-
-    function _nonReentrantAfter() internal {
-        _status = _NOT_ENTERED;
+    // Optional initialize for backward compatibility with existing tests
+    function initialize(address initialOwner) public {
+        // This function is kept for test compatibility but does nothing
+        // since initialization happens in constructor
     }
 
     function pause() public onlyOwner {
@@ -84,10 +48,6 @@ contract ScoremintTestable is
     function unpause() public onlyOwner {
         _unpause();
     }
-
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
 
     function createEvent(
         string memory _name,

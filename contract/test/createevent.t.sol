@@ -22,8 +22,7 @@ contract ScoremintTest is Test {
         prizeToken = new ERC20Mock();
 
         // Deploy testable Scoremint contract
-        scoremint = new ScoremintTestable();
-        scoremint.initialize(owner);
+        scoremint = new ScoremintTestable(owner);
 
         // Mint tokens to creators
         prizeToken.mint(creator1, INITIAL_BALANCE);

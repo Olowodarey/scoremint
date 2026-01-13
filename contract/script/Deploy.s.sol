@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 import "forge-std/Script.sol";
 import "../src/Scoremint.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployScript is Script {
     function run() external {
@@ -32,35 +31,18 @@ contract DeployScript is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy implementation contract
-        console.log("\nDeploying Scoremint implementation...");
-        Scoremint implementation = new Scoremint();
-        console.log("Implementation deployed at:", address(implementation));
+        // Deploy Scoremint contract directly (no proxy)
+        console.log("\nDeploying Scoremint contract...");
+        Scoremint scoremint = new Scoremint(deployer);
+        console.log("Scoremint deployed at:", address(scoremint));
 
-        // 2. Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            Scoremint.initialize.selector,
-            deployer // Owner address
-        );
-
-        // 3. Deploy proxy
-        console.log("\nDeploying ERC1967 Proxy...");
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            address(implementation),
-            initData
-        );
-        console.log("Proxy deployed at:", address(proxy));
-
-        // 4. Get the proxied contract instance
-        Scoremint scoremint = Scoremint(address(proxy));
-
-        // 5. Verify initialization
+        // Verify initialization
         console.log("\nVerifying deployment...");
         address owner = scoremint.owner();
         console.log("Contract owner:", owner);
         require(owner == deployer, "Owner mismatch");
 
-        // 6. Set oracle if provided
+        // Set oracle if provided
         address oracleAddress = vm.envOr("ORACLE_ADDRESS", address(0));
         if (oracleAddress != address(0)) {
             console.log("\nSetting oracle address...");
@@ -74,12 +56,11 @@ contract DeployScript is Script {
 
         vm.stopBroadcast();
 
-        // 7. Summary
+        // Summary
         console.log("\n==============================================");
         console.log("DEPLOYMENT SUCCESSFUL!");
         console.log("==============================================");
-        console.log("Implementation:", address(implementation));
-        console.log("Proxy (Main Contract):", address(proxy));
+        console.log("Contract Address:", address(scoremint));
         console.log("Owner:", owner);
         if (oracleAddress != address(0)) {
             console.log("Oracle:", oracleAddress);
@@ -90,16 +71,13 @@ contract DeployScript is Script {
         console.log("3. Test oracle integration");
         console.log("==============================================");
 
-        // 8. Save deployment info
+        // Save deployment info
         string memory deploymentInfo = string.concat(
             "{\n",
             '  "network": "base-mainnet",\n',
             '  "chainId": 8453,\n',
-            '  "implementation": "',
-            vm.toString(address(implementation)),
-            '",\n',
-            '  "proxy": "',
-            vm.toString(address(proxy)),
+            '  "contract": "',
+            vm.toString(address(scoremint)),
             '",\n',
             '  "owner": "',
             vm.toString(owner),

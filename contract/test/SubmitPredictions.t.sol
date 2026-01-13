@@ -23,8 +23,7 @@ contract SubmitPredictionsTest is Test {
         prizeToken = new ERC20Mock();
 
         // Deploy Scoremint
-        scoremint = new ScoremintTestable();
-        scoremint.initialize(owner);
+        scoremint = new ScoremintTestable(owner);
 
         // Set prize token
         vm.prank(owner);

@@ -26,11 +26,8 @@ contract DeploySimple is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy Scoremint directly (no proxy)
-        Scoremint scoremint = new Scoremint();
+        Scoremint scoremint = new Scoremint(deployer);
         console.log("\nScoremint deployed at:", address(scoremint));
-
-        // Initialize it
-        scoremint.initialize(deployer);
         console.log("Initialized with owner:", deployer);
 
         // Set oracle if provided

@@ -31,8 +31,7 @@ contract LeaderboardTest is Test {
     function setUp() public {
         // Deploy contracts
         prizeToken = new ERC20Mock();
-        scoremint = new ScoremintTestable();
-        scoremint.initialize(owner);
+        scoremint = new ScoremintTestable(owner);
 
         // Set prize token
         vm.prank(owner);
