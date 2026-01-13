@@ -43,10 +43,6 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
     mapping(address => uint256[]) public userParticipatedEvents; // user => event IDs participated
     mapping(address => bool) public isRegisteredUser; // track if user is registered
 
-    // Prize claim tracking
-    mapping(uint256 => mapping(address => bool)) public hasClaimed; // event ID => user => has claimed
-    mapping(uint256 => mapping(address => uint256)) public userRewards; // eventId => user => reward amount
-
     // =============================================================
     //                      INITIALIZATION
     // =============================================================
@@ -872,6 +868,10 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
      * @param eventId The ID of the event to finalize
      * @dev Can only be called by the event creator or oracle after deadline
      */
+    /**
+     * @notice Finalize event and automatically distribute prizes to winners
+     * @param eventId The ID of the event
+     */
     function finalizeEvent(
         uint256 eventId
     ) external whenNotPaused nonReentrant {
@@ -954,16 +954,16 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
         require(winnerCount > 0, "No valid winners");
 
         // Store winners
-        delete eventData.winners; // Clear existing winners array
+        delete eventData.winners;
         for (uint256 i = 0; i < winnerCount; i++) {
             eventData.winners.push(leaderboard[i].user);
         }
 
-        // Calculate and store rewards for each winner
+        // STEP 4: Calculate rewards and distribute automatically
         uint256 totalDistributed = 0;
+        uint256[] memory rewards = new uint256[](winnerCount);
 
         for (uint256 i = 0; i < winnerCount; i++) {
-            address winner = leaderboard[i].user;
             uint256 rank = leaderboard[i].rank;
 
             // Calculate reward based on rank
@@ -973,86 +973,39 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
                 rank
             );
 
-            userRewards[eventId][winner] = reward;
+            rewards[i] = reward;
             totalDistributed += reward;
         }
 
         // SAFETY CHECK: If ties caused over-distribution, scale down proportionally
         if (totalDistributed > eventData.prizePool) {
-            // Recalculate all rewards proportionally to fit within prize pool
             for (uint256 i = 0; i < winnerCount; i++) {
-                address winner = leaderboard[i].user;
-                uint256 originalReward = userRewards[eventId][winner];
-
-                // Scale down: (originalReward * prizePool) / totalDistributed
-                uint256 scaledReward = (originalReward * eventData.prizePool) /
+                rewards[i] =
+                    (rewards[i] * eventData.prizePool) /
                     totalDistributed;
-
-                userRewards[eventId][winner] = scaledReward;
             }
         }
 
-        // Update user stats for all winners
+        // STEP 5: Transfer prizes automatically to winners
         for (uint256 i = 0; i < winnerCount; i++) {
-            users[leaderboard[i].user].eventsWon++;
+            address winner = leaderboard[i].user;
+            uint256 reward = rewards[i];
+
+            if (reward > 0) {
+                // Update user stats
+                users[winner].eventsWon++;
+                users[winner].totalEarnings += reward;
+
+                // Transfer reward directly
+                IERC20(eventData.prizeToken).safeTransfer(winner, reward);
+
+                emit RewardClaimed(eventId, winner, reward);
+            }
         }
 
         eventData.finalized = true;
 
         emit EventFinalized(eventId, winnerCount, eventData.prizePool);
-    }
-
-    /**
-     * @notice Claim reward for a finalized event
-     * @param eventId The ID of the event
-     */
-    function claimReward(uint256 eventId) external whenNotPaused nonReentrant {
-        require(eventId < eventCounter, "Event does not exist");
-
-        ScoremintLib.PredictionEvent storage eventData = events[eventId];
-
-        require(eventData.finalized, "Event not finalized");
-        require(!hasClaimed[eventId][msg.sender], "Reward already claimed");
-
-        uint256 reward = userRewards[eventId][msg.sender];
-        require(reward > 0, "No reward to claim");
-
-        // Mark as claimed
-        hasClaimed[eventId][msg.sender] = true;
-
-        // Update user total earnings
-        users[msg.sender].totalEarnings += reward;
-
-        // Transfer reward using event's prize token
-        IERC20(eventData.prizeToken).safeTransfer(msg.sender, reward);
-
-        emit RewardClaimed(eventId, msg.sender, reward);
-    }
-
-    /**
-     * @notice Get reward amount for a user in an event
-     * @param eventId The ID of the event
-     * @param user The user address
-     * @return reward The reward amount
-     */
-    function getUserReward(
-        uint256 eventId,
-        address user
-    ) external view returns (uint256 reward) {
-        return userRewards[eventId][user];
-    }
-
-    /**
-     * @notice Check if a user has claimed their reward
-     * @param eventId The ID of the event
-     * @param user The user address
-     * @return Whether the user has claimed
-     */
-    function hasUserClaimed(
-        uint256 eventId,
-        address user
-    ) external view returns (bool) {
-        return hasClaimed[eventId][user];
     }
 
     /**
