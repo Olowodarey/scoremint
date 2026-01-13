@@ -8,7 +8,6 @@ import {
   parsePrizeAmount,
   USDC_ADDRESS,
 } from "@/lib/contracts/useScoremintContract";
-import { useMatchCreation } from "@/lib/contracts/useMatchCreation";
 import { useAccount } from "wagmi";
 
 // User prediction mode - what type of predictions users will make
@@ -16,6 +15,7 @@ type UserPredictionMode = "exact_score" | "outcome";
 
 export default function CreatePrediction() {
   const [eventName, setEventName] = useState("");
+  const [eventType, setEventType] = useState<"FREE" | "PAID">("FREE");
   const [prizeAmount, setPrizeAmount] = useState("");
   const [deadline, setDeadline] = useState("");
   const [userPredictionMode, setUserPredictionMode] =
@@ -34,12 +34,6 @@ export default function CreatePrediction() {
 
   // Contract hooks
   const { address, isConnected } = useAccount();
-  const {
-    createMatch,
-    isPending: _isCreatingMatch,
-    isConfirmed: _matchCreated,
-    matchCounter,
-  } = useMatchCreation();
   const {
     createEvent,
     isPending,
@@ -141,8 +135,16 @@ export default function CreatePrediction() {
     }
 
     // Validation
-    if (!eventName || !prizeAmount || !deadline) {
+    if (!eventName || !deadline) {
       alert("Please fill in all event details");
+      return;
+    }
+
+    if (
+      eventType === "PAID" &&
+      (!prizeAmount || parseFloat(prizeAmount) <= 0)
+    ) {
+      alert("Please enter a valid prize amount for paid events");
       return;
     }
 
@@ -152,54 +154,33 @@ export default function CreatePrediction() {
     }
 
     try {
-      setTxStatus("Creating matches in contract...");
+      setTxStatus("Creating event...");
 
-      // Step 1: Create matches in the contract
-      const matchIds: bigint[] = [];
-      const selectedFixtures = selectedMatches.map(
-        (matchId) => fixtures.find((m) => m.id === matchId)!
+      // Use API fixture IDs directly as match IDs
+      // The oracle will create the actual matches when settling
+      const matchIds: bigint[] = selectedMatches.map((matchId) =>
+        BigInt(matchId)
       );
 
-      // For now, we'll use the matchCounter as the starting point
-      // In production, you'd want to batch create matches or check if they exist
-      const startingMatchId = matchCounter || BigInt(0);
-
-      for (let i = 0; i < selectedFixtures.length; i++) {
-        const match = selectedFixtures[i];
-        const matchTimestamp = BigInt(match.timestamp);
-
-        // Create match in contract
-        await createMatch({
-          fixtureId: BigInt(match.id),
-          homeTeam: match.homeTeam.name,
-          awayTeam: match.awayTeam.name,
-          matchTimestamp,
-        });
-
-        // The match ID will be the current counter + i
-        matchIds.push(startingMatchId + BigInt(i));
-      }
-
-      setTxStatus("Matches created! Now creating event...");
-
-      // Step 2: Create the event
+      // Create the event with fixture IDs
       const deadlineTimestamp = Math.floor(new Date(deadline).getTime() / 1000);
-      const prizePoolWei = parsePrizeAmount(prizeAmount, 6); // USDC has 6 decimals
+      const prizePoolWei =
+        eventType === "PAID" ? parsePrizeAmount(prizeAmount, 6) : BigInt(0);
       const mode = userPredictionMode === "outcome" ? 0 : 1;
-      const eventType = parseFloat(prizeAmount) > 0 ? 1 : 0; // PAID if prize > 0, else FREE
+      const eventTypeNum = eventType === "PAID" ? 1 : 0;
 
       await createEvent({
         name: eventName,
         deadline: deadlineTimestamp,
         mode,
         matchIds,
-        eventType,
+        eventType: eventTypeNum,
         prizeToken: USDC_ADDRESS,
         prizePool: prizePoolWei,
         distributionType,
       });
 
-      setTxStatus("Event creation transaction submitted!");
+      setTxStatus("Event created successfully!");
     } catch (err) {
       console.error("Error creating event:", err);
       setTxStatus("");
@@ -246,22 +227,71 @@ export default function CreatePrediction() {
             />
           </div>
 
-          {/* Prize Amount */}
+          {/* Event Type */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Prize Amount (USDC)
+              Event Type
             </label>
-            <input
-              type="number"
-              placeholder="500"
-              value={prizeAmount}
-              onChange={(e) => setPrizeAmount(e.target.value)}
-              className="w-full px-4 py-3 bg-dark-card border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-primary focus:outline-none transition-colors"
-              required
-              min="0"
-              step="0.01"
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setEventType("FREE")}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  eventType === "FREE"
+                    ? "bg-primary/20 border-primary"
+                    : "bg-dark-card border-white/10 hover:border-white/20"
+                }`}
+              >
+                <div className="text-lg mb-1">🎁</div>
+                <div className="font-semibold text-white text-sm">
+                  Free Event
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  No prize pool required
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEventType("PAID")}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  eventType === "PAID"
+                    ? "bg-primary/20 border-primary"
+                    : "bg-dark-card border-white/10 hover:border-white/20"
+                }`}
+              >
+                <div className="text-lg mb-1">💰</div>
+                <div className="font-semibold text-white text-sm">
+                  Paid Event
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  With prize pool
+                </div>
+              </button>
+            </div>
           </div>
+
+          {/* Prize Amount - Only show for PAID events */}
+          {eventType === "PAID" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Prize Amount (USDC)
+              </label>
+              <input
+                type="number"
+                placeholder="500"
+                value={prizeAmount}
+                onChange={(e) => setPrizeAmount(e.target.value)}
+                className="w-full px-4 py-3 bg-dark-card border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-primary focus:outline-none transition-colors"
+                required
+                min="0"
+                step="0.01"
+              />
+              <p className="text-xs text-gray-400 mt-2">
+                💡 You'll need to approve USDC spending before creating the
+                event
+              </p>
+            </div>
+          )}
 
           {/* Deadline */}
           <div>
@@ -728,6 +758,8 @@ export default function CreatePrediction() {
             ? "Connect Wallet to Create Event"
             : isPending || isConfirming
             ? "Creating Event..."
+            : eventType === "FREE"
+            ? "Create Free Event"
             : `Create Event & Lock ${prizeAmount || "0"} USDC`}
         </button>
       </form>
