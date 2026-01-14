@@ -62,14 +62,14 @@ library ScoremintLib {
         uint64 deadline;
         PredictionMode mode;
         DistributionType distributionType;
-        uint256[] matchIds;
+        uint256[] fixtureIds; // API fixture IDs
         bool finalized;
         uint256 totalParticipants;
         address[] winners;
     }
 
     struct Prediction {
-        uint256 matchId;
+        uint256 fixtureId; // API fixture ID
         PredictionType outcome;
         uint8 homeScore;
         uint8 awayScore;
@@ -100,6 +100,14 @@ library ScoremintLib {
         string username;
         uint256 score;
         uint256 rank;
+    }
+
+    // Result provided by oracle when settling
+    struct MatchResult {
+        uint256 fixtureId;
+        uint64 matchTimestamp; // When the match was played
+        uint8 homeScore;
+        uint8 awayScore;
     }
 
     // =============================================================
@@ -154,29 +162,58 @@ library ScoremintLib {
     /**
      * @dev Calculates total points for all predictions
      * @param predictions Array of user predictions
-     * @param matches Array of actual match results (indexed by match ID)
+     * @param results Array of match results from oracle
      * @param mode The prediction mode
      * @return totalPoints The total points earned (number of correct predictions)
      */
     function calculateTotalPoints(
         Prediction[] memory predictions,
-        Match[] memory matches,
+        MatchResult[] memory results,
         PredictionMode mode
     ) public pure returns (uint256 totalPoints) {
         for (uint256 i = 0; i < predictions.length; i++) {
-            // Make sure the match exists and is settled
-            if (predictions[i].matchId < matches.length) {
-                Match memory actualMatch = matches[predictions[i].matchId];
-                if (actualMatch.status == MatchStatus.SETTLED) {
-                    totalPoints += calculatePointsForPrediction(
-                        predictions[i],
-                        actualMatch,
-                        mode
-                    );
+            // Find the result for this fixture
+            for (uint256 j = 0; j < results.length; j++) {
+                if (predictions[i].fixtureId == results[j].fixtureId) {
+                    // Calculate points based on mode
+                    if (mode == PredictionMode.OUTCOME) {
+                        PredictionType actualOutcome = getMatchOutcomeFromResult(
+                                results[j]
+                            );
+                        if (predictions[i].outcome == actualOutcome) {
+                            totalPoints += POINTS_PER_CORRECT_PREDICTION;
+                        }
+                    } else {
+                        // EXACT_SCORE mode
+                        if (
+                            predictions[i].homeScore == results[j].homeScore &&
+                            predictions[i].awayScore == results[j].awayScore
+                        ) {
+                            totalPoints += POINTS_PER_CORRECT_PREDICTION;
+                        }
+                    }
+                    break;
                 }
             }
         }
         return totalPoints;
+    }
+
+    /**
+     * @dev Determines the outcome of a match from result
+     * @param result The match result
+     * @return The match outcome (HOME_WIN, AWAY_WIN, or DRAW)
+     */
+    function getMatchOutcomeFromResult(
+        MatchResult memory result
+    ) public pure returns (PredictionType) {
+        if (result.homeScore > result.awayScore) {
+            return PredictionType.HOME_WIN;
+        } else if (result.awayScore > result.homeScore) {
+            return PredictionType.AWAY_WIN;
+        } else {
+            return PredictionType.DRAW;
+        }
     }
 
     /**

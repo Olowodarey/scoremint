@@ -105,21 +105,21 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
     }
 
     /**
-     * @notice Create a new prediction event
+     * @notice Create a new prediction event with fixture IDs
      * @param _name Name of the prediction event
      * @param _deadline Deadline for predictions (unix timestamp)
      * @param _mode Prediction mode (OUTCOME or EXACT_SCORE)
-     * @param _matchIds Array of match IDs for this event
+     * @param _fixtureIds Array of API fixture IDs for this event
      * @param _eventType Event type (FREE or PAID)
      * @param _prizeToken ERC20 token address for prizes (USDC, WETH, DAI, etc.)
      * @param _prizePool Prize pool amount (0 for FREE events)
-     * @param _distributionType How prizes will be distributed (WINNER_TAKE_ALL, TOP_3, TOP_5, TOP_10)
+     * @param _distributionType How prizes will be distributed (ignored for FREE events)
      */
     function createEvent(
         string memory _name,
         uint64 _deadline,
         ScoremintLib.PredictionMode _mode,
-        uint256[] memory _matchIds,
+        uint256[] memory _fixtureIds,
         ScoremintLib.EventType _eventType,
         address _prizeToken,
         uint256 _prizePool,
@@ -129,17 +129,13 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
         require(bytes(_name).length > 0, "Event name cannot be empty");
         require(_deadline > block.timestamp, "Deadline must be in the future");
         require(
-            _matchIds.length > 0 &&
-                _matchIds.length <= ScoremintLib.MAX_MATCHES_PER_EVENT,
-            "Invalid number of matches"
+            _fixtureIds.length > 0 &&
+                _fixtureIds.length <= ScoremintLib.MAX_MATCHES_PER_EVENT,
+            "Invalid number of fixtures"
         );
 
-        // Validate all matches exist
-        for (uint256 i = 0; i < _matchIds.length; i++) {
-            require(_matchIds[i] < matchCounter, "Match does not exist");
-        }
-
         uint256 finalPrizePool = 0;
+        ScoremintLib.DistributionType finalDistribution;
 
         // Handle prize pool based on event type
         if (_eventType == ScoremintLib.EventType.PAID) {
@@ -156,6 +152,7 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
                 _prizePool
             );
             finalPrizePool = _prizePool;
+            finalDistribution = _distributionType;
         } else {
             // FREE event - no prize pool required
             require(_prizePool == 0, "Prize pool must be 0 for FREE events");
@@ -163,6 +160,8 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
                 msg.value == 0,
                 "No native token should be sent for FREE events"
             );
+            // Force WINNER_TAKE_ALL for FREE events (doesn't matter, no prizes)
+            finalDistribution = ScoremintLib.DistributionType.WINNER_TAKE_ALL;
         }
 
         // Auto-register user if not registered
@@ -184,20 +183,23 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
         // Create event
         uint256 eventId = eventCounter++;
 
-        events[eventId] = ScoremintLib.PredictionEvent({
-            eventId: eventId,
-            creator: msg.sender,
-            name: _name,
-            prizePool: finalPrizePool,
-            prizeToken: _prizeToken,
-            deadline: _deadline,
-            mode: _mode,
-            distributionType: _distributionType,
-            matchIds: _matchIds,
-            finalized: false,
-            totalParticipants: 0,
-            winners: new address[](0)
-        });
+        // Create event struct
+        ScoremintLib.PredictionEvent storage newEvent = events[eventId];
+        newEvent.eventId = eventId;
+        newEvent.creator = msg.sender;
+        newEvent.name = _name;
+        newEvent.prizePool = finalPrizePool;
+        newEvent.prizeToken = _prizeToken;
+        newEvent.deadline = _deadline;
+        newEvent.mode = _mode;
+        newEvent.distributionType = finalDistribution;
+        newEvent.finalized = false;
+        newEvent.totalParticipants = 0;
+
+        // Store fixture IDs
+        for (uint256 i = 0; i < _fixtureIds.length; i++) {
+            newEvent.fixtureIds.push(_fixtureIds[i]);
+        }
 
         userEvents[msg.sender].push(eventId);
 
@@ -241,23 +243,23 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
             "Already submitted predictions for this event"
         );
 
-        // Validate predictions array length matches event's match count
+        // Validate predictions array length matches event's fixture count
         require(
-            predictions.length == eventData.matchIds.length,
-            "Must submit predictions for all matches"
+            predictions.length == eventData.fixtureIds.length,
+            "Must submit predictions for all fixtures"
         );
 
-        // Validate all predictions and match IDs
+        // Validate all predictions and fixture IDs
         for (uint256 i = 0; i < predictions.length; i++) {
-            // Validate that the match ID exists in the event
-            bool matchFound = false;
-            for (uint256 j = 0; j < eventData.matchIds.length; j++) {
-                if (predictions[i].matchId == eventData.matchIds[j]) {
-                    matchFound = true;
+            // Validate that the fixture ID exists in the event
+            bool fixtureFound = false;
+            for (uint256 j = 0; j < eventData.fixtureIds.length; j++) {
+                if (predictions[i].fixtureId == eventData.fixtureIds[j]) {
+                    fixtureFound = true;
                     break;
                 }
             }
-            require(matchFound, "Match ID not in event");
+            require(fixtureFound, "Fixture ID not in event");
 
             // Validate prediction type for OUTCOME mode
             if (eventData.mode == ScoremintLib.PredictionMode.OUTCOME) {
@@ -320,123 +322,68 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
     //                  MATCH SETTLEMENT FUNCTIONS
     // =============================================================
 
-    /**
-     * @notice Settle a single match with final scores (Oracle only)
-     * @param matchId The ID of the match to settle
-     * @param homeScore Final home team score
-     * @param awayScore Final away team score
-     */
-    function settleMatch(
-        uint256 matchId,
-        uint8 homeScore,
-        uint8 awayScore
-    ) external whenNotPaused {
-        require(msg.sender == oracle, "Only oracle can settle matches");
-        require(matchId < matchCounter, "Match does not exist");
-
-        ScoremintLib.Match storage matchData = matches[matchId];
-        require(
-            matchData.status == ScoremintLib.MatchStatus.PENDING,
-            "Match already settled"
-        );
-
-        // Update match with final scores
-        matchData.homeScore = homeScore;
-        matchData.awayScore = awayScore;
-        matchData.status = ScoremintLib.MatchStatus.SETTLED;
-
-        emit MatchSettled(matchId, homeScore, awayScore);
-    }
+    // Mapping to store match results for events
+    mapping(uint256 => ScoremintLib.MatchResult[]) private eventResults;
 
     /**
-     * @notice Settle multiple matches in one transaction (Gas efficient for oracle)
-     * @param matchIds Array of match IDs to settle
-     * @param homeScores Array of home team scores
-     * @param awayScores Array of away team scores
+     * @notice Settle an event with match results (Oracle only)
+     * @param eventId The ID of the event
+     * @param results Array of match results (fixtureId + scores)
      */
-    function settleMatches(
-        uint256[] calldata matchIds,
-        uint8[] calldata homeScores,
-        uint8[] calldata awayScores
+    function settleEventWithResults(
+        uint256 eventId,
+        ScoremintLib.MatchResult[] memory results
     ) external whenNotPaused {
         require(msg.sender == oracle, "Only oracle can settle matches");
+        require(eventId < eventCounter, "Event does not exist");
+
+        ScoremintLib.PredictionEvent storage eventData = events[eventId];
+
         require(
-            matchIds.length == homeScores.length &&
-                matchIds.length == awayScores.length,
-            "Array length mismatch"
+            results.length == eventData.fixtureIds.length,
+            "Must provide results for all fixtures"
         );
 
-        for (uint256 i = 0; i < matchIds.length; i++) {
-            uint256 matchId = matchIds[i];
-            require(matchId < matchCounter, "Match does not exist");
+        // Validate all fixture IDs match and timestamps
+        for (uint256 i = 0; i < results.length; i++) {
+            bool fixtureFound = false;
+            for (uint256 j = 0; j < eventData.fixtureIds.length; j++) {
+                if (results[i].fixtureId == eventData.fixtureIds[j]) {
+                    fixtureFound = true;
+                    break;
+                }
+            }
+            require(fixtureFound, "Fixture ID not in event");
 
-            ScoremintLib.Match storage matchData = matches[matchId];
+            // Ensure match has been played (timestamp has passed)
             require(
-                matchData.status == ScoremintLib.MatchStatus.PENDING,
-                "Match already settled"
+                results[i].matchTimestamp <= block.timestamp,
+                "Cannot settle match before it has been played"
             );
+        }
 
-            // Update match with final scores
-            matchData.homeScore = homeScores[i];
-            matchData.awayScore = awayScores[i];
-            matchData.status = ScoremintLib.MatchStatus.SETTLED;
-
-            emit MatchSettled(matchId, homeScores[i], awayScores[i]);
+        // Store results for this event
+        delete eventResults[eventId];
+        for (uint256 i = 0; i < results.length; i++) {
+            eventResults[eventId].push(results[i]);
+            emit MatchSettled(
+                results[i].fixtureId,
+                results[i].homeScore,
+                results[i].awayScore
+            );
         }
     }
 
     /**
-     * @notice Create a new match (for oracle or admin)
-     * @param _fixtureId External API fixture ID
-     * @param _homeTeam Name of home team
-     * @param _awayTeam Name of away team
-     * @param _matchTimestamp When the match will be played
-     * @return matchId The ID of the created match
+     * @notice Get match results for an event
+     * @param eventId The ID of the event
+     * @return Array of match results
      */
-    function createMatch(
-        uint256 _fixtureId,
-        string memory _homeTeam,
-        string memory _awayTeam,
-        uint64 _matchTimestamp
-    ) external whenNotPaused returns (uint256) {
-        require(
-            msg.sender == oracle || msg.sender == owner(),
-            "Only oracle or owner"
-        );
-        require(bytes(_homeTeam).length > 0, "Home team name required");
-        require(bytes(_awayTeam).length > 0, "Away team name required");
-
-        uint256 matchId = matchCounter++;
-        matches[matchId] = ScoremintLib.Match({
-            fixtureId: _fixtureId,
-            homeTeam: _homeTeam,
-            awayTeam: _awayTeam,
-            matchTimestamp: _matchTimestamp,
-            homeScore: 0,
-            awayScore: 0,
-            status: ScoremintLib.MatchStatus.PENDING
-        });
-
-        emit MatchCreated(
-            matchId,
-            _fixtureId,
-            _homeTeam,
-            _awayTeam,
-            _matchTimestamp
-        );
-        return matchId;
-    }
-
-    /**
-     * @notice Get match details
-     * @param matchId The ID of the match
-     * @return The match data
-     */
-    function getMatch(
-        uint256 matchId
-    ) external view returns (ScoremintLib.Match memory) {
-        require(matchId < matchCounter, "Match does not exist");
-        return matches[matchId];
+    function getEventResults(
+        uint256 eventId
+    ) external view returns (ScoremintLib.MatchResult[] memory) {
+        require(eventId < eventCounter, "Event does not exist");
+        return eventResults[eventId];
     }
 
     // =============================================================
@@ -889,20 +836,14 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
             "Only creator or oracle can finalize"
         );
 
-        // STEP 1: Get all matches for this event
-        uint256[] memory matchIds = eventData.matchIds;
-        ScoremintLib.Match[] memory eventMatches = new ScoremintLib.Match[](
-            matchIds.length
-        );
+        // STEP 1: Get match results from storage
+        ScoremintLib.MatchResult[] memory results = eventResults[eventId];
 
-        // Load match data and verify all are settled
-        for (uint256 i = 0; i < matchIds.length; i++) {
-            eventMatches[i] = matches[matchIds[i]];
-            require(
-                eventMatches[i].status == ScoremintLib.MatchStatus.SETTLED,
-                "All matches must be settled before finalizing"
-            );
-        }
+        // Verify all fixtures have results
+        require(
+            results.length == eventData.fixtureIds.length,
+            "All fixtures must be settled before finalizing"
+        );
 
         // STEP 2: Calculate scores for all participants
         address[] memory participants = eventParticipants[eventId];
@@ -916,7 +857,7 @@ contract Scoremint is Ownable, Pausable, ReentrancyGuard, IScoremintEvents {
             // Calculate total score using the library function
             uint256 score = ScoremintLib.calculateTotalPoints(
                 userPred.predictions,
-                eventMatches,
+                results,
                 eventData.mode
             );
 
