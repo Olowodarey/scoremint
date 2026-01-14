@@ -8,8 +8,10 @@ import { parseUnits } from "viem";
 import { base } from "wagmi/chains";
 import ScoremintABI from "./ScoremintABI.json";
 
-const CONTRACT_ADDRESS = process.env
+export const CONTRACT_ADDRESS = process.env
   .NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+
+export { ScoremintABI };
 
 export interface CreateEventParams {
   name: string;

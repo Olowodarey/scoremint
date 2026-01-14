@@ -8,6 +8,7 @@ import {
   parsePrizeAmount,
   USDC_ADDRESS,
 } from "@/lib/contracts/useScoremintContract";
+import { useMatchCreation } from "@/lib/contracts/useMatchCreation";
 import { useAccount } from "wagmi";
 
 // User prediction mode - what type of predictions users will make
@@ -36,15 +37,30 @@ export default function CreatePrediction() {
   const { address, isConnected } = useAccount();
   const {
     createEvent,
-    isPending,
-    isConfirming,
-    isConfirmed,
-    error: contractError,
-    hash,
+    isPending: isEventPending,
+    isConfirming: isEventConfirming,
+    isConfirmed: isEventConfirmed,
+    error: eventError,
+    hash: eventHash,
   } = useScoremintContract();
+
+  const {
+    createMatch,
+    isPending: isMatchPending,
+    isConfirming: isMatchConfirming,
+    isConfirmed: isMatchConfirmed,
+    error: matchError,
+    matchCounter,
+  } = useMatchCreation();
 
   // Transaction state
   const [txStatus, setTxStatus] = useState<string>("");
+  const [matchCreationPhase, setMatchCreationPhase] = useState<
+    "idle" | "creating_matches" | "creating_event" | "complete"
+  >("idle");
+  const [createdMatchIds, setCreatedMatchIds] = useState<bigint[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(0);
+  const [matchCreationErrors, setMatchCreationErrors] = useState<string[]>([]);
 
   // Top leagues configuration
   const topLeagues = [
@@ -154,15 +170,64 @@ export default function CreatePrediction() {
     }
 
     try {
-      setTxStatus("Creating event...");
+      // Reset state
+      setCreatedMatchIds([]);
+      setMatchCreationErrors([]);
+      setMatchCreationPhase("creating_matches");
 
-      // Use API fixture IDs directly as match IDs
-      // The oracle will create the actual matches when settling
-      const matchIds: bigint[] = selectedMatches.map((matchId) =>
-        BigInt(matchId)
-      );
+      // Phase 1: Create matches sequentially
+      const contractMatchIds: bigint[] = [];
+      const startingMatchCounter = matchCounter || BigInt(0);
 
-      // Create the event with fixture IDs
+      for (let i = 0; i < selectedMatches.length; i++) {
+        setCurrentMatchIndex(i);
+        setTxStatus(`Creating match ${i + 1} of ${selectedMatches.length}...`);
+
+        const fixtureId = selectedMatches[i];
+        const fixture = fixtures.find((f) => f.id === fixtureId);
+
+        if (!fixture) {
+          throw new Error(`Fixture ${fixtureId} not found`);
+        }
+
+        try {
+          // Create match in contract
+          await createMatch({
+            fixtureId: BigInt(fixture.id),
+            homeTeam: fixture.homeTeam.name,
+            awayTeam: fixture.awayTeam.name,
+            matchTimestamp: BigInt(
+              Math.floor(new Date(fixture.date).getTime() / 1000)
+            ),
+          });
+
+          // Wait for match creation to be confirmed
+          // The match ID will be the current matchCounter value
+          const matchId = startingMatchCounter + BigInt(i);
+          contractMatchIds.push(matchId);
+          setCreatedMatchIds((prev) => [...prev, matchId]);
+
+          setTxStatus(
+            `Match ${i + 1} created successfully! (${
+              fixture.homeTeam.name
+            } vs ${fixture.awayTeam.name})`
+          );
+
+          // Small delay to ensure transaction is processed
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        } catch (err) {
+          const errorMsg = `Failed to create match ${i + 1}: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }`;
+          setMatchCreationErrors((prev) => [...prev, errorMsg]);
+          throw new Error(errorMsg);
+        }
+      }
+
+      // Phase 2: Create event with contract match IDs
+      setMatchCreationPhase("creating_event");
+      setTxStatus("All matches created! Now creating event...");
+
       const deadlineTimestamp = Math.floor(new Date(deadline).getTime() / 1000);
       const prizePoolWei =
         eventType === "PAID" ? parsePrizeAmount(prizeAmount, 6) : BigInt(0);
@@ -173,16 +238,18 @@ export default function CreatePrediction() {
         name: eventName,
         deadline: deadlineTimestamp,
         mode,
-        matchIds,
+        matchIds: contractMatchIds, // Use contract match IDs, not API fixture IDs
         eventType: eventTypeNum,
         prizeToken: USDC_ADDRESS,
         prizePool: prizePoolWei,
         distributionType,
       });
 
+      setMatchCreationPhase("complete");
       setTxStatus("Event created successfully!");
     } catch (err) {
       console.error("Error creating event:", err);
+      setMatchCreationPhase("idle");
       setTxStatus("");
       alert(
         `Failed to create event: ${
@@ -680,6 +747,65 @@ export default function CreatePrediction() {
           </div>
         )}
 
+        {/* Match Creation Progress */}
+        {matchCreationPhase === "creating_matches" && (
+          <div className="glass-card p-4 border-l-4 border-primary">
+            <h3 className="text-lg font-semibold text-white mb-3">
+              ⚙️ Creating Matches...
+            </h3>
+            <div className="space-y-3">
+              {selectedMatches.map((matchId, index) => {
+                const match = fixtures.find((m) => m.id === matchId);
+                if (!match) return null;
+
+                const isCompleted = index < createdMatchIds.length;
+                const isCurrent = index === currentMatchIndex;
+                const isPending = index > currentMatchIndex;
+
+                return (
+                  <div
+                    key={matchId}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      isCompleted
+                        ? "bg-green-500/10 border-green-500/30"
+                        : isCurrent
+                        ? "bg-primary/10 border-primary"
+                        : "bg-dark-card border-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        {isCompleted && (
+                          <span className="text-green-400 text-xl">✅</span>
+                        )}
+                        {isCurrent && (
+                          <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                        )}
+                        {isPending && (
+                          <span className="text-gray-500 text-xl">⏸️</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-white">
+                          {match.homeTeam.name} vs {match.awayTeam.name}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {match.league.name}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {isCompleted && "Created"}
+                      {isCurrent && "Creating..."}
+                      {isPending && "Pending"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Info Card */}
         <div className="glass-card p-4 border-l-4 border-primary">
           <p className="text-sm text-gray-300">
@@ -697,13 +823,15 @@ export default function CreatePrediction() {
         </div>
 
         {/* Transaction Status */}
-        {(txStatus || isConfirmed) && (
+        {(txStatus || isEventConfirmed || matchCreationPhase !== "idle") && (
           <div
             className={`glass-card p-4 border-l-4 ${
-              isConfirmed ? "border-green-500" : "border-primary"
+              isEventConfirmed || matchCreationPhase === "complete"
+                ? "border-green-500"
+                : "border-primary"
             }`}
           >
-            {isConfirmed ? (
+            {isEventConfirmed || matchCreationPhase === "complete" ? (
               <div>
                 <p className="text-green-400 font-semibold mb-2">
                   ✅ Event Created Successfully!
@@ -711,23 +839,31 @@ export default function CreatePrediction() {
                 <p className="text-sm text-gray-300">
                   Transaction:{" "}
                   <a
-                    href={`https://basescan.org/tx/${hash}`}
+                    href={`https://basescan.org/tx/${eventHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
                   >
-                    {hash?.slice(0, 10)}...{hash?.slice(-8)}
+                    {eventHash?.slice(0, 10)}...{eventHash?.slice(-8)}
                   </a>
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  {createdMatchIds.length} matches created successfully
                 </p>
               </div>
             ) : (
               <div>
                 <p className="text-primary font-semibold mb-2">⏳ {txStatus}</p>
-                {(isPending || isConfirming) && (
+                {(isEventPending ||
+                  isEventConfirming ||
+                  isMatchPending ||
+                  isMatchConfirming) && (
                   <div className="flex items-center gap-2 text-sm text-gray-400">
                     <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                     <span>
-                      {isPending
+                      {isMatchPending || isMatchConfirming
+                        ? "Waiting for match creation confirmation..."
+                        : isEventPending
                         ? "Waiting for wallet confirmation..."
                         : "Confirming transaction..."}
                     </span>
@@ -739,25 +875,52 @@ export default function CreatePrediction() {
         )}
 
         {/* Contract Error */}
-        {contractError && (
+        {(eventError || matchError || matchCreationErrors.length > 0) && (
           <div className="glass-card p-4 border-l-4 border-red-500">
             <p className="text-red-400 font-semibold mb-2">
               ❌ Transaction Failed
             </p>
-            <p className="text-sm text-gray-300">{contractError.message}</p>
+            {eventError && (
+              <p className="text-sm text-gray-300 mb-2">{eventError.message}</p>
+            )}
+            {matchError && (
+              <p className="text-sm text-gray-300 mb-2">{matchError.message}</p>
+            )}
+            {matchCreationErrors.map((error, index) => (
+              <p key={index} className="text-sm text-gray-300 mb-1">
+                {error}
+              </p>
+            ))}
           </div>
         )}
 
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isPending || isConfirming || !isConnected}
+          disabled={
+            isEventPending ||
+            isEventConfirming ||
+            isMatchPending ||
+            isMatchConfirming ||
+            matchCreationPhase !== "idle" ||
+            !isConnected
+          }
           className="w-full bg-gradient-to-r from-primary to-blue-600 hover:from-primary-dark hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {!isConnected
             ? "Connect Wallet to Create Event"
-            : isPending || isConfirming
-            ? "Creating Event..."
+            : isEventPending ||
+              isEventConfirming ||
+              isMatchPending ||
+              isMatchConfirming ||
+              matchCreationPhase !== "idle"
+            ? matchCreationPhase === "creating_matches"
+              ? `Creating Matches (${currentMatchIndex + 1}/${
+                  selectedMatches.length
+                })...`
+              : matchCreationPhase === "creating_event"
+              ? "Creating Event..."
+              : "Processing..."
             : eventType === "FREE"
             ? "Create Free Event"
             : `Create Event & Lock ${prizeAmount || "0"} USDC`}
