@@ -15,9 +15,9 @@ export { ScoremintABI };
 
 export interface CreateEventParams {
   name: string;
-  deadline: number; // Unix timestamp
+  deadline: bigint; // Unix timestamp as BigInt
   mode: 0 | 1; // 0 = OUTCOME, 1 = EXACT_SCORE
-  matchIds: bigint[];
+  fixtureIds: bigint[]; // API fixture IDs
   eventType: 0 | 1; // 0 = FREE, 1 = PAID
   prizeToken: `0x${string}`;
   prizePool: bigint;
@@ -53,7 +53,7 @@ export function useScoremintContract() {
         params.name,
         params.deadline,
         params.mode,
-        params.matchIds,
+        params.fixtureIds, // Changed from matchIds
         params.eventType,
         params.prizeToken,
         params.prizePool,

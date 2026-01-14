@@ -8,7 +8,6 @@ import {
   parsePrizeAmount,
   USDC_ADDRESS,
 } from "@/lib/contracts/useScoremintContract";
-import { useMatchCreation } from "@/lib/contracts/useMatchCreation";
 import { useAccount } from "wagmi";
 
 // User prediction mode - what type of predictions users will make
@@ -44,23 +43,8 @@ export default function CreatePrediction() {
     hash: eventHash,
   } = useScoremintContract();
 
-  const {
-    createMatch,
-    isPending: isMatchPending,
-    isConfirming: isMatchConfirming,
-    isConfirmed: isMatchConfirmed,
-    error: matchError,
-    matchCounter,
-  } = useMatchCreation();
-
   // Transaction state
   const [txStatus, setTxStatus] = useState<string>("");
-  const [matchCreationPhase, setMatchCreationPhase] = useState<
-    "idle" | "creating_matches" | "creating_event" | "complete"
-  >("idle");
-  const [createdMatchIds, setCreatedMatchIds] = useState<bigint[]>([]);
-  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(0);
-  const [matchCreationErrors, setMatchCreationErrors] = useState<string[]>([]);
 
   // Top leagues configuration
   const topLeagues = [
@@ -170,86 +154,48 @@ export default function CreatePrediction() {
     }
 
     try {
-      // Reset state
-      setCreatedMatchIds([]);
-      setMatchCreationErrors([]);
-      setMatchCreationPhase("creating_matches");
+      setTxStatus("Creating event...");
 
-      // Phase 1: Create matches sequentially
-      const contractMatchIds: bigint[] = [];
-      const startingMatchCounter = matchCounter || BigInt(0);
+      // Convert selected fixture IDs to BigInt array
+      const fixtureIds: bigint[] = selectedMatches.map((id) => BigInt(id));
 
-      for (let i = 0; i < selectedMatches.length; i++) {
-        setCurrentMatchIndex(i);
-        setTxStatus(`Creating match ${i + 1} of ${selectedMatches.length}...`);
+      // Parse deadline to Unix timestamp
+      const deadlineTimestamp = BigInt(
+        Math.floor(new Date(deadline).getTime() / 1000)
+      );
 
-        const fixtureId = selectedMatches[i];
-        const fixture = fixtures.find((f) => f.id === fixtureId);
-
-        if (!fixture) {
-          throw new Error(`Fixture ${fixtureId} not found`);
-        }
-
-        try {
-          // Create match in contract
-          await createMatch({
-            fixtureId: BigInt(fixture.id),
-            homeTeam: fixture.homeTeam.name,
-            awayTeam: fixture.awayTeam.name,
-            matchTimestamp: BigInt(
-              Math.floor(new Date(fixture.date).getTime() / 1000)
-            ),
-          });
-
-          // Wait for match creation to be confirmed
-          // The match ID will be the current matchCounter value
-          const matchId = startingMatchCounter + BigInt(i);
-          contractMatchIds.push(matchId);
-          setCreatedMatchIds((prev) => [...prev, matchId]);
-
-          setTxStatus(
-            `Match ${i + 1} created successfully! (${
-              fixture.homeTeam.name
-            } vs ${fixture.awayTeam.name})`
-          );
-
-          // Small delay to ensure transaction is processed
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        } catch (err) {
-          const errorMsg = `Failed to create match ${i + 1}: ${
-            err instanceof Error ? err.message : "Unknown error"
-          }`;
-          setMatchCreationErrors((prev) => [...prev, errorMsg]);
-          throw new Error(errorMsg);
-        }
-      }
-
-      // Phase 2: Create event with contract match IDs
-      setMatchCreationPhase("creating_event");
-      setTxStatus("All matches created! Now creating event...");
-
-      const deadlineTimestamp = Math.floor(new Date(deadline).getTime() / 1000);
+      // Parse prize pool
       const prizePoolWei =
         eventType === "PAID" ? parsePrizeAmount(prizeAmount, 6) : BigInt(0);
-      const mode = userPredictionMode === "outcome" ? 0 : 1;
-      const eventTypeNum = eventType === "PAID" ? 1 : 0;
 
+      // Determine final distribution type
+      // For FREE events, contract will automatically use WINNER_TAKE_ALL
+      const finalDistribution = eventType === "FREE" ? 0 : distributionType;
+
+      // Create event with fixture IDs (one transaction!)
       await createEvent({
         name: eventName,
         deadline: deadlineTimestamp,
-        mode,
-        matchIds: contractMatchIds, // Use contract match IDs, not API fixture IDs
-        eventType: eventTypeNum,
+        mode: userPredictionMode === "outcome" ? 0 : 1,
+        fixtureIds: fixtureIds,
+        eventType: eventType === "PAID" ? 1 : 0,
         prizeToken: USDC_ADDRESS,
         prizePool: prizePoolWei,
-        distributionType,
+        distributionType: finalDistribution,
       });
 
-      setMatchCreationPhase("complete");
       setTxStatus("Event created successfully!");
+
+      // Reset form after successful creation
+      setTimeout(() => {
+        setEventName("");
+        setPrizeAmount("");
+        setDeadline("");
+        setSelectedMatches([]);
+        setTxStatus("");
+      }, 3000);
     } catch (err) {
       console.error("Error creating event:", err);
-      setMatchCreationPhase("idle");
       setTxStatus("");
       alert(
         `Failed to create event: ${
@@ -418,77 +364,79 @@ export default function CreatePrediction() {
             </div>
           </div>
 
-          {/* Distribution Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Prize Distribution
-            </label>
-            <p className="text-xs text-gray-500 mb-3">
-              How will the prize pool be distributed among winners?
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setDistributionType(0)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  distributionType === 0
-                    ? "bg-primary/20 border-primary"
-                    : "bg-dark-card border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="text-lg mb-1">👑</div>
-                <div className="font-semibold text-white text-sm">
-                  Winner Takes All
-                </div>
-                <div className="text-xs text-gray-400 mt-1">100% to #1</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistributionType(1)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  distributionType === 1
-                    ? "bg-primary/20 border-primary"
-                    : "bg-dark-card border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="text-lg mb-1">🥇🥈🥉</div>
-                <div className="font-semibold text-white text-sm">Top 3</div>
-                <div className="text-xs text-gray-400 mt-1">
-                  Split among top 3
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistributionType(2)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  distributionType === 2
-                    ? "bg-primary/20 border-primary"
-                    : "bg-dark-card border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="text-lg mb-1">🏆</div>
-                <div className="font-semibold text-white text-sm">Top 5</div>
-                <div className="text-xs text-gray-400 mt-1">
-                  Split among top 5
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistributionType(3)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  distributionType === 3
-                    ? "bg-primary/20 border-primary"
-                    : "bg-dark-card border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="text-lg mb-1">🎖️</div>
-                <div className="font-semibold text-white text-sm">Top 10</div>
-                <div className="text-xs text-gray-400 mt-1">
-                  Split among top 10
-                </div>
-              </button>
+          {/* Distribution Type - Only for PAID events */}
+          {eventType === "PAID" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Prize Distribution
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                How will the prize pool be distributed among winners?
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDistributionType(0)}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                    distributionType === 0
+                      ? "bg-primary/20 border-primary"
+                      : "bg-dark-card border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="text-lg mb-1">👑</div>
+                  <div className="font-semibold text-white text-sm">
+                    Winner Takes All
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">100% to #1</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistributionType(1)}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                    distributionType === 1
+                      ? "bg-primary/20 border-primary"
+                      : "bg-dark-card border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="text-lg mb-1">🥇🥈🥉</div>
+                  <div className="font-semibold text-white text-sm">Top 3</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Split among top 3
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistributionType(2)}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                    distributionType === 2
+                      ? "bg-primary/20 border-primary"
+                      : "bg-dark-card border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="text-lg mb-1">🏆</div>
+                  <div className="font-semibold text-white text-sm">Top 5</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Split among top 5
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistributionType(3)}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                    distributionType === 3
+                      ? "bg-primary/20 border-primary"
+                      : "bg-dark-card border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="text-lg mb-1">🎖️</div>
+                  <div className="font-semibold text-white text-sm">Top 10</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Split among top 10
+                  </div>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Match Selection Section */}
@@ -747,65 +695,6 @@ export default function CreatePrediction() {
           </div>
         )}
 
-        {/* Match Creation Progress */}
-        {matchCreationPhase === "creating_matches" && (
-          <div className="glass-card p-4 border-l-4 border-primary">
-            <h3 className="text-lg font-semibold text-white mb-3">
-              ⚙️ Creating Matches...
-            </h3>
-            <div className="space-y-3">
-              {selectedMatches.map((matchId, index) => {
-                const match = fixtures.find((m) => m.id === matchId);
-                if (!match) return null;
-
-                const isCompleted = index < createdMatchIds.length;
-                const isCurrent = index === currentMatchIndex;
-                const isPending = index > currentMatchIndex;
-
-                return (
-                  <div
-                    key={matchId}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      isCompleted
-                        ? "bg-green-500/10 border-green-500/30"
-                        : isCurrent
-                        ? "bg-primary/10 border-primary"
-                        : "bg-dark-card border-white/10"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0">
-                        {isCompleted && (
-                          <span className="text-green-400 text-xl">✅</span>
-                        )}
-                        {isCurrent && (
-                          <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                        )}
-                        {isPending && (
-                          <span className="text-gray-500 text-xl">⏸️</span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-white">
-                          {match.homeTeam.name} vs {match.awayTeam.name}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {match.league.name}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {isCompleted && "Created"}
-                      {isCurrent && "Creating..."}
-                      {isPending && "Pending"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Info Card */}
         <div className="glass-card p-4 border-l-4 border-primary">
           <p className="text-sm text-gray-300">
@@ -823,15 +712,13 @@ export default function CreatePrediction() {
         </div>
 
         {/* Transaction Status */}
-        {(txStatus || isEventConfirmed || matchCreationPhase !== "idle") && (
+        {(txStatus || isEventConfirmed) && (
           <div
             className={`glass-card p-4 border-l-4 ${
-              isEventConfirmed || matchCreationPhase === "complete"
-                ? "border-green-500"
-                : "border-primary"
+              isEventConfirmed ? "border-green-500" : "border-primary"
             }`}
           >
-            {isEventConfirmed || matchCreationPhase === "complete" ? (
+            {isEventConfirmed ? (
               <div>
                 <p className="text-green-400 font-semibold mb-2">
                   ✅ Event Created Successfully!
@@ -847,23 +734,15 @@ export default function CreatePrediction() {
                     {eventHash?.slice(0, 10)}...{eventHash?.slice(-8)}
                   </a>
                 </p>
-                <p className="text-xs text-gray-400 mt-2">
-                  {createdMatchIds.length} matches created successfully
-                </p>
               </div>
             ) : (
               <div>
                 <p className="text-primary font-semibold mb-2">⏳ {txStatus}</p>
-                {(isEventPending ||
-                  isEventConfirming ||
-                  isMatchPending ||
-                  isMatchConfirming) && (
+                {(isEventPending || isEventConfirming) && (
                   <div className="flex items-center gap-2 text-sm text-gray-400">
                     <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                     <span>
-                      {isMatchPending || isMatchConfirming
-                        ? "Waiting for match creation confirmation..."
-                        : isEventPending
+                      {isEventPending
                         ? "Waiting for wallet confirmation..."
                         : "Confirming transaction..."}
                     </span>
@@ -875,52 +754,25 @@ export default function CreatePrediction() {
         )}
 
         {/* Contract Error */}
-        {(eventError || matchError || matchCreationErrors.length > 0) && (
+        {eventError && (
           <div className="glass-card p-4 border-l-4 border-red-500">
             <p className="text-red-400 font-semibold mb-2">
               ❌ Transaction Failed
             </p>
-            {eventError && (
-              <p className="text-sm text-gray-300 mb-2">{eventError.message}</p>
-            )}
-            {matchError && (
-              <p className="text-sm text-gray-300 mb-2">{matchError.message}</p>
-            )}
-            {matchCreationErrors.map((error, index) => (
-              <p key={index} className="text-sm text-gray-300 mb-1">
-                {error}
-              </p>
-            ))}
+            <p className="text-sm text-gray-300 mb-2">{eventError.message}</p>
           </div>
         )}
 
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={
-            isEventPending ||
-            isEventConfirming ||
-            isMatchPending ||
-            isMatchConfirming ||
-            matchCreationPhase !== "idle" ||
-            !isConnected
-          }
+          disabled={isEventPending || isEventConfirming || !isConnected}
           className="w-full bg-gradient-to-r from-primary to-blue-600 hover:from-primary-dark hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {!isConnected
             ? "Connect Wallet to Create Event"
-            : isEventPending ||
-              isEventConfirming ||
-              isMatchPending ||
-              isMatchConfirming ||
-              matchCreationPhase !== "idle"
-            ? matchCreationPhase === "creating_matches"
-              ? `Creating Matches (${currentMatchIndex + 1}/${
-                  selectedMatches.length
-                })...`
-              : matchCreationPhase === "creating_event"
-              ? "Creating Event..."
-              : "Processing..."
+            : isEventPending || isEventConfirming
+            ? "Creating Event..."
             : eventType === "FREE"
             ? "Create Free Event"
             : `Create Event & Lock ${prizeAmount || "0"} USDC`}

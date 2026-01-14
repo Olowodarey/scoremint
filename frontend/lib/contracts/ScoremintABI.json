@@ -30,7 +30,7 @@
         "internalType": "enum ScoremintLib.PredictionMode"
       },
       {
-        "name": "_matchIds",
+        "name": "_fixtureIds",
         "type": "uint256[]",
         "internalType": "uint256[]"
       },
@@ -57,40 +57,6 @@
     ],
     "outputs": [],
     "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "createMatch",
-    "inputs": [
-      {
-        "name": "_fixtureId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_homeTeam",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "_awayTeam",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "_matchTimestamp",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -257,7 +223,7 @@
             "internalType": "enum ScoremintLib.DistributionType"
           },
           {
-            "name": "matchIds",
+            "name": "fixtureIds",
             "type": "uint256[]",
             "internalType": "uint256[]"
           },
@@ -332,7 +298,7 @@
             "internalType": "enum ScoremintLib.DistributionType"
           },
           {
-            "name": "matchIds",
+            "name": "fixtureIds",
             "type": "uint256[]",
             "internalType": "uint256[]"
           },
@@ -413,7 +379,7 @@
             "internalType": "enum ScoremintLib.DistributionType"
           },
           {
-            "name": "matchIds",
+            "name": "fixtureIds",
             "type": "uint256[]",
             "internalType": "uint256[]"
           },
@@ -542,7 +508,7 @@
   },
   {
     "type": "function",
-    "name": "getEventWinners",
+    "name": "getEventResults",
     "inputs": [
       {
         "name": "eventId",
@@ -553,42 +519,13 @@
     "outputs": [
       {
         "name": "",
-        "type": "address[]",
-        "internalType": "address[]"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getMatch",
-    "inputs": [
-      {
-        "name": "matchId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct ScoremintLib.Match",
+        "type": "tuple[]",
+        "internalType": "struct ScoremintLib.MatchResult[]",
         "components": [
           {
             "name": "fixtureId",
             "type": "uint256",
             "internalType": "uint256"
-          },
-          {
-            "name": "homeTeam",
-            "type": "string",
-            "internalType": "string"
-          },
-          {
-            "name": "awayTeam",
-            "type": "string",
-            "internalType": "string"
           },
           {
             "name": "matchTimestamp",
@@ -604,13 +541,27 @@
             "name": "awayScore",
             "type": "uint8",
             "internalType": "uint8"
-          },
-          {
-            "name": "status",
-            "type": "uint8",
-            "internalType": "enum ScoremintLib.MatchStatus"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getEventWinners",
+    "inputs": [
+      {
+        "name": "eventId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
     "stateMutability": "view"
@@ -672,7 +623,7 @@
             "internalType": "enum ScoremintLib.DistributionType"
           },
           {
-            "name": "matchIds",
+            "name": "fixtureIds",
             "type": "uint256[]",
             "internalType": "uint256[]"
           },
@@ -791,7 +742,7 @@
             "internalType": "enum ScoremintLib.DistributionType"
           },
           {
-            "name": "matchIds",
+            "name": "fixtureIds",
             "type": "uint256[]",
             "internalType": "uint256[]"
           },
@@ -857,7 +808,7 @@
             "internalType": "struct ScoremintLib.Prediction[]",
             "components": [
               {
-                "name": "matchId",
+                "name": "fixtureId",
                 "type": "uint256",
                 "internalType": "uint256"
               },
@@ -1270,45 +1221,39 @@
   },
   {
     "type": "function",
-    "name": "settleMatch",
+    "name": "settleEventWithResults",
     "inputs": [
       {
-        "name": "matchId",
+        "name": "eventId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "homeScore",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "awayScore",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "settleMatches",
-    "inputs": [
-      {
-        "name": "matchIds",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "homeScores",
-        "type": "uint8[]",
-        "internalType": "uint8[]"
-      },
-      {
-        "name": "awayScores",
-        "type": "uint8[]",
-        "internalType": "uint8[]"
+        "name": "results",
+        "type": "tuple[]",
+        "internalType": "struct ScoremintLib.MatchResult[]",
+        "components": [
+          {
+            "name": "fixtureId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "matchTimestamp",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "homeScore",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "awayScore",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
       }
     ],
     "outputs": [],
@@ -1329,7 +1274,7 @@
         "internalType": "struct ScoremintLib.Prediction[]",
         "components": [
           {
-            "name": "matchId",
+            "name": "fixtureId",
             "type": "uint256",
             "internalType": "uint256"
           },
