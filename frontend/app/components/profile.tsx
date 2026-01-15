@@ -4,27 +4,9 @@ import React, { useState } from "react";
 import { useAccount } from "wagmi";
 import { useUserProfile } from "@/lib/contracts/useUserProfile";
 
-interface UserStats {
-  eventsWon: number;
-  totalPredictions: number;
-  points: number;
-  winRate: number;
-  currentStreak: number;
-  rank: number;
-}
-
-interface Event {
-  id: string;
-  name: string;
-  date: string;
-  result: "won" | "lost" | "pending";
-  prediction: string;
-  points: number;
-}
-
 const Profile = () => {
   const { address, isConnected } = useAccount();
-  const { userStats, recentEvents, isLoading, error, isRegistered } =
+  const { userStats, recentEvents, isLoading, isRegistered } =
     useUserProfile(address);
 
   const [activeTab, setActiveTab] = useState<"overview" | "history">(
@@ -70,8 +52,8 @@ const Profile = () => {
             Welcome to ScoreMint!
           </h2>
           <p className="text-gray-400 mb-6">
-            You haven't participated in any events yet. Start making predictions
-            to build your profile!
+            You haven&apos;t participated in any events yet. Start making
+            predictions to build your profile!
           </p>
           <div className="grid grid-cols-2 gap-3 mt-6">
             <div className="glass-card p-4 text-center">

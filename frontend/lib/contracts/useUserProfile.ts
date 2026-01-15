@@ -112,34 +112,45 @@ export function useUserProfile(address: `0x${string}` | undefined) {
     return eventsData
       .slice(-5)
       .reverse()
-      .map((event: any, index: number) => {
-        const eventId = event.eventId?.toString() || index.toString();
-        const deadline = Number(event.deadline || 0);
-        const isFinalized = event.finalized || false;
-        const winners = event.winners || [];
+      .map(
+        (
+          event: {
+            eventId?: bigint;
+            deadline?: bigint;
+            finalized?: boolean;
+            winners?: string[];
+            name?: string;
+          },
+          index: number
+        ) => {
+          const eventId = event.eventId?.toString() || index.toString();
+          const deadline = Number(event.deadline || 0);
+          const isFinalized = event.finalized || false;
+          const winners = event.winners || [];
 
-        // Determine result
-        let result: "won" | "lost" | "pending" = "pending";
-        if (isFinalized && address) {
-          result = winners.some(
-            (w: string) => w.toLowerCase() === address.toLowerCase()
-          )
-            ? "won"
-            : "lost";
+          // Determine result
+          let result: "won" | "lost" | "pending" = "pending";
+          if (isFinalized && address) {
+            result = winners.some(
+              (w: string) => w.toLowerCase() === address.toLowerCase()
+            )
+              ? "won"
+              : "lost";
+          }
+
+          return {
+            id: eventId,
+            name: event.name || `Event #${eventId}`,
+            date:
+              deadline > 0
+                ? new Date(deadline * 1000).toISOString().split("T")[0]
+                : "",
+            result,
+            prediction: "View Details", // TODO: Fetch actual predictions
+            points: 0, // TODO: Calculate from user predictions
+          };
         }
-
-        return {
-          id: eventId,
-          name: event.name || `Event #${eventId}`,
-          date:
-            deadline > 0
-              ? new Date(deadline * 1000).toISOString().split("T")[0]
-              : "",
-          result,
-          prediction: "View Details", // TODO: Fetch actual predictions
-          points: 0, // TODO: Calculate from user predictions
-        };
-      });
+      );
   }, [eventsData, address]);
 
   const isLoading = isLoadingStats || isLoadingEvents || isLoadingRegistration;
