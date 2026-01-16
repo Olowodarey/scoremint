@@ -1,13 +1,16 @@
 "use client";
 
 interface BottomNavProps {
-  currentView: "home" | "leaderboards" | "create" | "profile";
-  onNavigate: (view: "home" | "leaderboards" | "create" | "profile") => void;
+  currentView: "home" | "events" | "leaderboards" | "create" | "profile";
+  onNavigate: (
+    view: "home" | "events" | "leaderboards" | "create" | "profile"
+  ) => void;
 }
 
 export default function BottomNav({ currentView, onNavigate }: BottomNavProps) {
   const navItems = [
     { id: "home" as const, icon: "🏠", label: "Home" },
+    { id: "events" as const, icon: "🎯", label: "Events" },
     { id: "leaderboards" as const, icon: "🏆", label: "Leaderboards" },
     { id: "create" as const, icon: "➕", label: "Create" },
   ];

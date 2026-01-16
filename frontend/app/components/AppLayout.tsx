@@ -5,8 +5,10 @@ import BottomNav from "./BottomNav";
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  currentView: "home" | "leaderboards" | "create" | "profile";
-  onNavigate: (view: "home" | "leaderboards" | "create" | "profile") => void;
+  currentView: "home" | "events" | "leaderboards" | "create" | "profile";
+  onNavigate: (
+    view: "home" | "events" | "leaderboards" | "create" | "profile"
+  ) => void;
 }
 
 export default function AppLayout({

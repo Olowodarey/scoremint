@@ -4,10 +4,10 @@ import { useQuickAuth, useMiniKit } from "@coinbase/onchainkit/minikit";
 
 import AppLayout from "./components/AppLayout";
 import Homep from "./views/Home";
+import Events from "./views/Events";
 import Leaderboards from "./views/Leaderboards";
 import CreatePrediction from "./views/CreatePrediction";
 import Profile from "./components/profile";
-
 
 interface AuthResponse {
   success: boolean;
@@ -19,10 +19,11 @@ interface AuthResponse {
   message?: string; // Error messages come as 'message' not 'error'
 }
 
-
 export default function Home() {
   const { isFrameReady, setFrameReady } = useMiniKit();
-  const [currentView, setCurrentView] = useState<'home' | 'leaderboards' | 'create' | 'profile'>('home');
+  const [currentView, setCurrentView] = useState<
+    "home" | "events" | "leaderboards" | "create" | "profile"
+  >("home");
 
   // Initialize the  miniapp
   useEffect(() => {
@@ -30,8 +31,6 @@ export default function Home() {
       setFrameReady();
     }
   }, [setFrameReady, isFrameReady]);
- 
-  
 
   // If you need to verify the user's identity, you can use the useQuickAuth hook.
   // This hook will verify the user's signature and return the user's FID. You can update
@@ -46,11 +45,12 @@ export default function Home() {
   useQuickAuth<AuthResponse>("/api/auth", { method: "GET" });
 
   return (
-      <AppLayout currentView={currentView} onNavigate={setCurrentView}>
-      {currentView === 'home' && <Homep />}
-      {currentView === 'leaderboards' && <Leaderboards />}
-      {currentView === 'create' && <CreatePrediction />}
-      {currentView === 'profile' && <Profile />}
+    <AppLayout currentView={currentView} onNavigate={setCurrentView}>
+      {currentView === "home" && <Homep />}
+      {currentView === "events" && <Events />}
+      {currentView === "leaderboards" && <Leaderboards />}
+      {currentView === "create" && <CreatePrediction />}
+      {currentView === "profile" && <Profile />}
     </AppLayout>
   );
 }
