@@ -7,7 +7,9 @@ import {
   useScoremintContract,
   parsePrizeAmount,
   USDC_ADDRESS,
+  CONTRACT_ADDRESS,
 } from "@/lib/contracts/useScoremintContract";
+import { useContractStatus } from "@/lib/contracts/useContractStatus";
 import { useAccount } from "wagmi";
 
 // User prediction mode - what type of predictions users will make
@@ -36,6 +38,7 @@ export default function CreatePrediction() {
   const { address, isConnected } = useAccount();
   const {
     createEvent,
+    approveUSDC,
     isPending: isEventPending,
     isConfirming: isEventConfirming,
     isConfirmed: isEventConfirmed,
@@ -43,8 +46,18 @@ export default function CreatePrediction() {
     hash: eventHash,
   } = useScoremintContract();
 
+  // Check contract status
+  const {
+    isPaused,
+    oracle,
+    owner,
+    eventCounter,
+    isLoading: isStatusLoading,
+  } = useContractStatus();
+
   // Transaction state
   const [txStatus, setTxStatus] = useState<string>("");
+  const [isApproving, setIsApproving] = useState(false);
 
   // Top leagues configuration
   const topLeagues = [
@@ -77,7 +90,7 @@ export default function CreatePrediction() {
             const todayStr = today.toISOString().split("T")[0];
             fetchedFixtures = await footballApi.getFixturesByDate(
               todayStr,
-              leagueFilter || undefined
+              leagueFilter || undefined,
             );
             break;
           case "tomorrow":
@@ -86,7 +99,7 @@ export default function CreatePrediction() {
             const tomorrowStr = tomorrow.toISOString().split("T")[0];
             fetchedFixtures = await footballApi.getFixturesByDate(
               tomorrowStr,
-              leagueFilter || undefined
+              leagueFilter || undefined,
             );
             break;
           case "week":
@@ -97,7 +110,7 @@ export default function CreatePrediction() {
             fetchedFixtures = await footballApi.getFixturesByDateRange(
               todayStr2,
               weekEndStr,
-              leagueFilter || undefined
+              leagueFilter || undefined,
             );
             break;
         }
@@ -105,7 +118,7 @@ export default function CreatePrediction() {
         setFixtures(fetchedFixtures);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to fetch fixtures"
+          err instanceof Error ? err.message : "Failed to fetch fixtures",
         );
         console.error("Error fetching fixtures:", err);
       } finally {
@@ -121,7 +134,7 @@ export default function CreatePrediction() {
     setSelectedMatches((prev) =>
       prev.includes(matchId)
         ? prev.filter((id) => id !== matchId)
-        : [...prev, matchId]
+        : [...prev, matchId],
     );
   };
 
@@ -140,6 +153,16 @@ export default function CreatePrediction() {
       return;
     }
 
+    // Check if deadline is in the future
+    const deadlineDate = new Date(deadline);
+    const now = new Date();
+    if (deadlineDate <= now) {
+      alert(
+        "Deadline must be in the future. Please select a future date and time.",
+      );
+      return;
+    }
+
     if (
       eventType === "PAID" &&
       (!prizeAmount || parseFloat(prizeAmount) <= 0)
@@ -154,14 +177,12 @@ export default function CreatePrediction() {
     }
 
     try {
-      setTxStatus("Creating event...");
-
       // Convert selected fixture IDs to BigInt array
       const fixtureIds: bigint[] = selectedMatches.map((id) => BigInt(id));
 
       // Parse deadline to Unix timestamp
       const deadlineTimestamp = BigInt(
-        Math.floor(new Date(deadline).getTime() / 1000)
+        Math.floor(new Date(deadline).getTime() / 1000),
       );
 
       // Parse prize pool
@@ -172,7 +193,59 @@ export default function CreatePrediction() {
       // For FREE events, contract will automatically use WINNER_TAKE_ALL
       const finalDistribution = eventType === "FREE" ? 0 : distributionType;
 
-      // Create event with fixture IDs (one transaction!)
+      // Debug logging
+      console.log("=== Creating Event ===");
+      console.log("Event Name:", eventName);
+      console.log("Deadline (input):", deadline);
+      console.log("Deadline (timestamp):", deadlineTimestamp.toString());
+      console.log(
+        "Mode:",
+        userPredictionMode === "outcome" ? "OUTCOME (0)" : "EXACT_SCORE (1)",
+      );
+      console.log(
+        "Fixture IDs:",
+        fixtureIds.map((id) => id.toString()),
+      );
+      console.log(
+        "Event Type:",
+        eventType === "PAID" ? "PAID (1)" : "FREE (0)",
+      );
+      console.log("Prize Pool (wei):", prizePoolWei.toString());
+      console.log("Distribution Type:", finalDistribution);
+      console.log("Contract Address:", CONTRACT_ADDRESS);
+      console.log("USDC Address:", USDC_ADDRESS);
+
+      // Step 1: Approve USDC for PAID events
+      if (eventType === "PAID") {
+        setTxStatus("Approving USDC...");
+        setIsApproving(true);
+
+        try {
+          await approveUSDC(prizePoolWei);
+          setTxStatus("USDC approved! Now creating event...");
+
+          // Wait a bit for the approval to be confirmed
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        } catch (approvalError) {
+          console.error("Error approving USDC:", approvalError);
+          setTxStatus("");
+          setIsApproving(false);
+          alert(
+            `Failed to approve USDC: ${
+              approvalError instanceof Error
+                ? approvalError.message
+                : "Unknown error"
+            }`,
+          );
+          return;
+        }
+
+        setIsApproving(false);
+      }
+
+      // Step 2: Create event with fixture IDs
+      setTxStatus("Creating event...");
+
       await createEvent({
         name: eventName,
         deadline: deadlineTimestamp,
@@ -195,13 +268,36 @@ export default function CreatePrediction() {
         setTxStatus("");
       }, 3000);
     } catch (err) {
-      console.error("Error creating event:", err);
-      setTxStatus("");
-      alert(
-        `Failed to create event: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`
+      console.error("=== Error Creating Event ===");
+      console.error("Full error object:", err);
+      console.error(
+        "Error message:",
+        err instanceof Error ? err.message : "Unknown error",
       );
+      console.error(
+        "Error stack:",
+        err instanceof Error ? err.stack : "No stack",
+      );
+
+      setTxStatus("");
+      setIsApproving(false);
+
+      // Try to extract more meaningful error message
+      let errorMessage = "Unknown error";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        // Check if it's a contract revert with a reason
+        if (err.message.includes("reverted")) {
+          const match = err.message.match(
+            /reverted with reason string '(.+?)'/,
+          );
+          if (match) {
+            errorMessage = `Contract error: ${match[1]}`;
+          }
+        }
+      }
+
+      alert(`Failed to create event: ${errorMessage}`);
     }
   };
 
@@ -216,6 +312,35 @@ export default function CreatePrediction() {
           Set up a new prediction event with multiple matches
         </p>
       </div>
+
+      {/* Contract Status Warning */}
+      {!isStatusLoading && isPaused && (
+        <div className="mb-6 p-4 bg-red-500/20 border border-red-500/40 rounded-lg">
+          <p className="text-red-400 font-semibold mb-2">
+            ⚠️ Contract is Paused
+          </p>
+          <p className="text-red-300 text-sm">
+            The contract is currently paused. Event creation is disabled. Please
+            contact the contract owner to unpause it.
+          </p>
+          <p className="text-red-300 text-xs mt-2">
+            Owner: {owner || "Not set"}
+          </p>
+        </div>
+      )}
+
+      {/* Debug Info (only in development) */}
+      {!isStatusLoading && (
+        <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+          <p className="text-blue-400 font-semibold mb-2">🔍 Contract Status</p>
+          <div className="text-sm text-gray-300 space-y-1">
+            <p>Paused: {isPaused ? "❌ Yes" : "✅ No"}</p>
+            <p>Oracle: {oracle || "❌ Not set"}</p>
+            <p>Owner: {owner || "❌ Not set"}</p>
+            <p>Total Events: {eventCounter}</p>
+          </div>
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -300,8 +425,8 @@ export default function CreatePrediction() {
                 step="0.01"
               />
               <p className="text-xs text-gray-400 mt-2">
-                💡 You&apos;ll need to approve USDC spending before creating the
-                event
+                💡 You&apos;ll be asked to approve USDC spending first, then
+                create the event
               </p>
             </div>
           )}
@@ -461,7 +586,7 @@ export default function CreatePrediction() {
                 type="button"
                 onClick={() =>
                   setDateFilter(
-                    filter.value as "today" | "tomorrow" | "week" | "live"
+                    filter.value as "today" | "tomorrow" | "week" | "live",
                   )
                 }
                 className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
@@ -766,16 +891,20 @@ export default function CreatePrediction() {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isEventPending || isEventConfirming || !isConnected}
+          disabled={
+            isEventPending || isEventConfirming || isApproving || !isConnected
+          }
           className="w-full bg-gradient-to-r from-primary to-blue-600 hover:from-primary-dark hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {!isConnected
             ? "Connect Wallet to Create Event"
-            : isEventPending || isEventConfirming
-            ? "Creating Event..."
-            : eventType === "FREE"
-            ? "Create Free Event"
-            : `Create Event & Lock ${prizeAmount || "0"} USDC`}
+            : isApproving
+              ? "Approving USDC..."
+              : isEventPending || isEventConfirming
+                ? "Creating Event..."
+                : eventType === "FREE"
+                  ? "Create Free Event"
+                  : `Approve & Create Event (${prizeAmount || "0"} USDC)`}
         </button>
       </form>
     </div>

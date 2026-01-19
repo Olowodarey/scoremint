@@ -11,6 +11,30 @@ import ScoremintABI from "./ScoremintABI.json";
 export const CONTRACT_ADDRESS = process.env
   .NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 
+// ERC20 ABI for approve function
+export const ERC20_ABI = [
+  {
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    name: "approve",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    name: "allowance",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
 export { ScoremintABI };
 
 export interface CreateEventParams {
@@ -62,8 +86,28 @@ export function useScoremintContract() {
     });
   };
 
+  const approveUSDC = async (amount: bigint) => {
+    if (!CONTRACT_ADDRESS) {
+      throw new Error("Contract address not configured");
+    }
+
+    // Check if we're on the correct network (Base = 8453)
+    if (chainId !== base.id) {
+      console.log("Switching to Base network...");
+      await switchChain({ chainId: base.id });
+    }
+
+    return writeContract({
+      address: USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [CONTRACT_ADDRESS, amount],
+    });
+  };
+
   return {
     createEvent,
+    approveUSDC,
     isPending,
     isConfirming,
     isConfirmed,
