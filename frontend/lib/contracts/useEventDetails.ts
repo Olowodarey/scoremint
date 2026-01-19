@@ -24,18 +24,26 @@ export function useEventDetails(eventId: bigint) {
   // Fetch fixtures from API when event loads
   useEffect(() => {
     async function fetchFixtures() {
-      if (!event || !event.fixtureIds || event.fixtureIds.length === 0) {
+      const typedEvent = event as { fixtureIds?: bigint[] } | undefined;
+
+      if (
+        !typedEvent ||
+        !typedEvent.fixtureIds ||
+        typedEvent.fixtureIds.length === 0
+      ) {
         return;
       }
 
       setIsLoadingFixtures(true);
       try {
-        const fixturePromises = event.fixtureIds.map((id: bigint) =>
+        const fixturePromises = typedEvent.fixtureIds.map((id: bigint) =>
           footballApi.getFixtureById(Number(id)),
         );
         const fetchedFixtures = await Promise.all(fixturePromises);
         setFixtures(
-          fetchedFixtures.filter((f) => f !== null) as SimpleFixture[],
+          fetchedFixtures.filter(
+            (f: SimpleFixture | null) => f !== null,
+          ) as SimpleFixture[],
         );
       } catch (err) {
         console.error("Error fetching fixtures:", err);
@@ -48,7 +56,21 @@ export function useEventDetails(eventId: bigint) {
   }, [event]);
 
   return {
-    event: event as any,
+    event: event as
+      | {
+          eventId: bigint;
+          creator: string;
+          name: string;
+          prizePool: bigint;
+          prizeToken: string;
+          deadline: bigint;
+          mode: number;
+          distributionType: number;
+          finalized: boolean;
+          totalParticipants: bigint;
+          fixtureIds: bigint[];
+        }
+      | undefined,
     fixtures,
     isLoading: isLoading || isLoadingFixtures,
     error,

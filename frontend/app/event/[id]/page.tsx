@@ -11,8 +11,7 @@ import {
 } from "@/lib/contracts/useEventDetails";
 import { useSubmitPredictions } from "@/lib/contracts/useSubmitPredictions";
 import { formatUnits } from "viem";
-
-type PredictionType = "HOME_WIN" | "AWAY_WIN" | "DRAW";
+import type { SimpleFixture } from "@/app/types/football.types";
 
 interface Prediction {
   fixtureId: bigint;
@@ -27,16 +26,9 @@ export default function EventDetails() {
   const { address, isConnected } = useAccount();
   const eventId = params?.id ? BigInt(params.id as string) : BigInt(0);
 
-  const { event, fixtures, isLoading, error, refetch } =
-    useEventDetails(eventId);
-  const {
-    submitPredictions,
-    isPending,
-    isConfirming,
-    isConfirmed,
-    error: submitError,
-    hash,
-  } = useSubmitPredictions();
+  const { event, fixtures, isLoading, error } = useEventDetails(eventId);
+  const { submitPredictions, isPending, isConfirming, isConfirmed, hash } =
+    useSubmitPredictions();
 
   const [predictions, setPredictions] = useState<Map<string, Prediction>>(
     new Map(),
@@ -47,7 +39,7 @@ export default function EventDetails() {
   useEffect(() => {
     if (fixtures && fixtures.length > 0) {
       const initialPredictions = new Map<string, Prediction>();
-      fixtures.forEach((fixture) => {
+      fixtures.forEach((fixture: SimpleFixture) => {
         initialPredictions.set(fixture.id.toString(), {
           fixtureId: BigInt(fixture.id),
           outcome: 0, // Default to HOME_WIN
@@ -245,7 +237,7 @@ export default function EventDetails() {
 
           {/* Fixtures List */}
           <div className="space-y-4 mb-8">
-            {fixtures.map((fixture) => {
+            {fixtures.map((fixture: SimpleFixture) => {
               const prediction = predictions.get(fixture.id.toString());
 
               return (
