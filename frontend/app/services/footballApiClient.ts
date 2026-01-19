@@ -99,6 +99,37 @@ class FootballApiClient {
   }
 
   /**
+   * Fetch a single fixture by ID
+   * @param fixtureId - Fixture ID
+   */
+  async getFixtureById(fixtureId: number): Promise<SimpleFixture | null> {
+    try {
+      const params = new URLSearchParams({
+        id: fixtureId.toString(),
+      });
+
+      const response = await fetch(
+        `${this.baseUrl}/fixtures?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: FixturesResponse = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to fetch fixture");
+      }
+
+      return data.fixtures[0] || null;
+    } catch (error) {
+      console.error("Error fetching fixture by ID:", error);
+      return null;
+    }
+  }
+
+  /**
    * Fetch fixtures for a specific league and season
    * @param leagueId - League ID (e.g., 39 for Premier League)
    * @param season - Season year (e.g., 2025)

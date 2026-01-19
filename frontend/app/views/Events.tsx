@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useAllEvents,
   getEventMode,
@@ -206,9 +207,11 @@ function EventCard({ event }: EventCardProps) {
       </div>
 
       {/* Join Button */}
-      <button className="w-full mt-4 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 hover:from-blue-400 hover:via-purple-400 hover:to-emerald-400 text-white font-bold transition-all hover:shadow-lg hover:shadow-purple-500/30 active:scale-[0.98]">
-        View Details →
-      </button>
+      <Link href={`/event/${event.eventId.toString()}`}>
+        <button className="w-full mt-4 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 hover:from-blue-400 hover:via-purple-400 hover:to-emerald-400 text-white font-bold transition-all hover:shadow-lg hover:shadow-purple-500/30 active:scale-[0.98]">
+          View Details →
+        </button>
+      </Link>
     </div>
   );
 }
