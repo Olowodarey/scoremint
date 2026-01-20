@@ -101,20 +101,6 @@ ScoreMint supports long-running competitions where:
 
 ---
 
-## Why Base
-
-ScoreMint is built on Base because it offers:
-
-**Low transaction fees**
-**Fast confirmations**
-**Consumer-app friendly UX**
-**Scalability** for social prediction traffic
-**Strong ecosystem support**
-
-Base makes on-chain social apps practical.
-
----
-
 ## What Makes ScoreMint Different
 
 **Optional rewards** - play for fun or prizes
