@@ -36,12 +36,12 @@ export default function EventDetails() {
     new Map(),
   );
   const [txStatus, setTxStatus] = useState("");
-  const [currentView, setCurrentView] = useState<
+  const [currentView] = useState<
     "home" | "events" | "leaderboards" | "create" | "profile"
   >("events");
 
   const handleNavigation = (
-    view: "home" | "events" | "leaderboards" | "create" | "profile",
+    _view: "home" | "events" | "leaderboards" | "create" | "profile",
   ) => {
     // Navigate back to home page for navigation
     router.push("/");
