@@ -2,12 +2,9 @@ import { NextResponse } from "next/server";
 import { ethers } from "ethers";
 
 const CONTRACT_ADDRESS = "0x70dB6488fA0a6869a8b599bD2be044A0BA1f5d50";
-const ORACLE_PRIVATE_KEY =
-  process.env.ORACLE_PRIVATE_KEY ||
-  "9238a857a5b64b9b2b95e8c3cdd70dd242c8bab59666552389b888ef5034e57d";
+const ORACLE_PRIVATE_KEY = process.env.ORACLE_PRIVATE_KEY;
 const RPC_URL = "https://mainnet.base.org";
-const API_KEY =
-  process.env.API_FOOTBALL_KEY || "e25ccd2f8868107af61fb020bfb98e43";
+const API_KEY = process.env.API_FOOTBALL_KEY;
 const API_BASE = "https://v3.football.api-sports.io";
 
 const ABI = [
@@ -18,6 +15,10 @@ const ABI = [
 ];
 
 async function fetchFixtureResult(fixtureId: number) {
+  if (!API_KEY) {
+    throw new Error("API_FOOTBALL_KEY is not configured");
+  }
+
   const response = await fetch(`${API_BASE}/fixtures?id=${fixtureId}`, {
     headers: { "x-apisports-key": API_KEY },
   });
@@ -47,6 +48,27 @@ async function fetchFixtureResult(fixtureId: number) {
  */
 export async function POST() {
   try {
+    // Validate required environment variables
+    if (!ORACLE_PRIVATE_KEY) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ORACLE_PRIVATE_KEY environment variable is not set",
+        },
+        { status: 500 },
+      );
+    }
+
+    if (!API_KEY) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "API_FOOTBALL_KEY environment variable is not set",
+        },
+        { status: 500 },
+      );
+    }
+
     console.log("🤖 Auto-finalization started...");
 
     const provider = new ethers.JsonRpcProvider(RPC_URL);
