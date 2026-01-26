@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { useEventResults } from "@/lib/contracts/useEventResults";
 import {
   useEventStatus,
@@ -9,14 +9,10 @@ import {
   getStatusColor,
 } from "@/lib/contracts/useEventStatus";
 import { useEventDetails } from "@/lib/contracts/useEventDetails";
-import { footballApi } from "@/app/services/footballApiClient";
-import type { SimpleFixture } from "@/app/types/football.types";
 import {
   getOutcomeLabel,
   isPredictionCorrect,
   calculatePredictionPoints,
-  type MatchResult,
-  type Prediction,
 } from "@/lib/contracts/useEventResults";
 
 interface PredictionDetailsProps {
@@ -67,7 +63,7 @@ export default function PredictionDetails({
               No Predictions Found
             </h3>
             <p className="text-gray-400 mb-6">
-              You haven't submitted predictions for this event.
+              You haven&apos;t submitted predictions for this event.
             </p>
             <button
               onClick={onClose}

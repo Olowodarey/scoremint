@@ -1,0 +1,38 @@
+name: Oracle Auto-Finalization
+
+on:
+  schedule:
+    # Run every 10 minutes
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  auto-finalize:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Auto-finalize events
+        run: |
+          response=$(curl -s -X POST "${{ secrets.APP_URL }}/api/oracle/auto-finalize")
+          echo "Response: $response"
+
+          # Check if successful
+          if echo "$response" | jq -e '.success == true' > /dev/null; then
+            settled=$(echo "$response" | jq -r '.settled')
+            finalized=$(echo "$response" | jq -r '.finalized')
+            errors=$(echo "$response" | jq -r '.errors')
+            
+            echo "✅ Auto-finalization completed"
+            echo "   Settled: $settled events"
+            echo "   Finalized: $finalized events"
+            echo "   Errors: $errors"
+            
+            if [ "$errors" -gt 0 ]; then
+              echo "⚠️  Some events had errors:"
+              echo "$response" | jq -r '.details.errors[]'
+            fi
+          else
+            echo "❌ Auto-finalization failed"
+            echo "$response" | jq -r '.error'
+            exit 1
+          fi

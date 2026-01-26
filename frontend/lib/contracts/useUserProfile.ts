@@ -132,7 +132,7 @@ export function useUserProfile(address: `0x${string}` | undefined) {
 
           // Determine result with better state handling
           let result: "won" | "lost" | "pending" = "pending";
-          let points = 0;
+          const points = 0;
 
           if (isFinalized && address) {
             // Event is finalized, check if user won

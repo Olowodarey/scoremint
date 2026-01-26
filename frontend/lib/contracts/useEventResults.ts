@@ -1,6 +1,5 @@
 import { useReadContract, useAccount } from "wagmi";
 import { CONTRACT_ADDRESS, ScoremintABI } from "./useScoremintContract";
-import { useState, useEffect } from "react";
 
 export interface MatchResult {
   fixtureId: bigint;
