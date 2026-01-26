@@ -1,4 +1,4 @@
-import React from "react";
+import { useMemo } from "react";
 import { useReadContract } from "wagmi";
 import { CONTRACT_ADDRESS, ScoremintABI } from "./useScoremintContract";
 
@@ -66,7 +66,7 @@ export function useUserProfile(address: `0x${string}` | undefined) {
     });
 
   // Process stats data
-  const userStats: UserStats = React.useMemo(() => {
+  const userStats: UserStats = useMemo(() => {
     if (!statsData) {
       return {
         eventsWon: 0,
@@ -102,7 +102,7 @@ export function useUserProfile(address: `0x${string}` | undefined) {
   }, [statsData]);
 
   // Process events data
-  const recentEvents: Event[] = React.useMemo(() => {
+  const recentEvents: Event[] = useMemo(() => {
     if (!eventsData || !Array.isArray(eventsData)) {
       return [];
     }
