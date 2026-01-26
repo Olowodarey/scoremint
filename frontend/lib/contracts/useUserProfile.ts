@@ -132,7 +132,6 @@ export function useUserProfile(address: `0x${string}` | undefined) {
 
           // Determine result with better state handling
           let result: "won" | "lost" | "pending" = "pending";
-          const points = 0;
 
           if (isFinalized && address) {
             // Event is finalized, check if user won
@@ -157,7 +156,7 @@ export function useUserProfile(address: `0x${string}` | undefined) {
                 : "",
             result,
             prediction: "View Details", // TODO: Fetch actual predictions
-            points,
+            points: 0, // TODO: Fetch actual points from contract
           };
         },
       );
