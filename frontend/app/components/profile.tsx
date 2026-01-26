@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useAccount } from "wagmi";
 import { useUserProfile } from "@/lib/contracts/useUserProfile";
+import PredictionDetails from "./PredictionDetails";
 
 const Profile = () => {
   const { address, isConnected } = useAccount();
@@ -10,8 +11,9 @@ const Profile = () => {
     useUserProfile(address);
 
   const [activeTab, setActiveTab] = useState<"overview" | "history">(
-    "overview"
+    "overview",
   );
+  const [selectedEventId, setSelectedEventId] = useState<bigint | null>(null);
 
   // Show loading state
   if (isLoading) {
@@ -291,53 +293,68 @@ const Profile = () => {
           </div>
 
           <div className="space-y-3">
-            {recentEvents.map((event) => (
-              <div key={event.id} className="glass-card p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h4 className="text-white font-semibold">{event.name}</h4>
-                    <p className="text-xs text-gray-400">
-                      {new Date(event.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div
-                    className={`text-xs px-2 py-1 rounded ${
-                      event.result === "won"
-                        ? "bg-green-500/20 text-green-400"
-                        : event.result === "lost"
-                        ? "bg-red-500/20 text-red-400"
-                        : "bg-yellow-500/20 text-yellow-400"
-                    }`}
-                  >
-                    {event.result === "won" && "✓ Won"}
-                    {event.result === "lost" && "× Lost"}
-                    {event.result === "pending" && "⏳ Pending"}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-xs text-gray-400">
-                      Your Prediction:{" "}
-                    </span>
-                    <span className="text-sm text-white">
-                      {event.prediction}
-                    </span>
-                  </div>
-                  <span
-                    className={`text-sm font-bold ${
-                      event.result === "won"
-                        ? "text-green-400"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    {event.result === "won" ? "+" : ""}
-                    {event.points} pts
-                  </span>
-                </div>
+            {recentEvents.length === 0 ? (
+              <div className="text-center py-8">
+                <span className="text-4xl mb-2 block">📭</span>
+                <p className="text-gray-400">No predictions yet</p>
               </div>
-            ))}
+            ) : (
+              recentEvents.map((event) => (
+                <div key={event.id} className="glass-card p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h4 className="text-white font-semibold">{event.name}</h4>
+                      <p className="text-xs text-gray-400">
+                        {event.date
+                          ? new Date(event.date).toLocaleDateString()
+                          : "N/A"}
+                      </p>
+                    </div>
+                    <div
+                      className={`text-xs px-2 py-1 rounded ${
+                        event.result === "won"
+                          ? "bg-green-500/20 text-green-400"
+                          : event.result === "lost"
+                            ? "bg-red-500/20 text-red-400"
+                            : "bg-yellow-500/20 text-yellow-400"
+                      }`}
+                    >
+                      {event.result === "won" && "✓ Won"}
+                      {event.result === "lost" && "× Lost"}
+                      {event.result === "pending" && "⏳ Pending"}
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-3 pt-3 border-t border-white/10">
+                    <button
+                      onClick={() => setSelectedEventId(BigInt(event.id))}
+                      className="text-sm text-purple-400 hover:text-purple-300 transition-colors font-medium"
+                    >
+                      View Details →
+                    </button>
+                    <span
+                      className={`text-sm font-bold ${
+                        event.result === "won"
+                          ? "text-green-400"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      {event.result === "won" && event.points > 0 ? "+" : ""}
+                      {event.points} pts
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
+      )}
+
+      {/* Prediction Details Modal */}
+      {selectedEventId !== null && (
+        <PredictionDetails
+          eventId={selectedEventId}
+          onClose={() => setSelectedEventId(null)}
+        />
       )}
     </div>
   );

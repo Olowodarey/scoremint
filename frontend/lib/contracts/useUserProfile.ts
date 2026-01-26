@@ -84,7 +84,7 @@ export function useUserProfile(address: `0x${string}` | undefined) {
       bigint,
       bigint,
       bigint,
-      bigint
+      bigint,
     ];
 
     const participated = Number(eventsParticipated);
@@ -121,21 +121,31 @@ export function useUserProfile(address: `0x${string}` | undefined) {
             winners?: string[];
             name?: string;
           },
-          index: number
+          index: number,
         ) => {
           const eventId = event.eventId?.toString() || index.toString();
           const deadline = Number(event.deadline || 0);
           const isFinalized = event.finalized || false;
           const winners = event.winners || [];
+          const now = Math.floor(Date.now() / 1000);
+          const isExpired = deadline <= now;
 
-          // Determine result
+          // Determine result with better state handling
           let result: "won" | "lost" | "pending" = "pending";
+          let points = 0;
+
           if (isFinalized && address) {
-            result = winners.some(
-              (w: string) => w.toLowerCase() === address.toLowerCase()
-            )
-              ? "won"
-              : "lost";
+            // Event is finalized, check if user won
+            const isWinner = winners.some(
+              (w: string) => w.toLowerCase() === address.toLowerCase(),
+            );
+            result = isWinner ? "won" : "lost";
+
+            // TODO: Fetch actual points from userPredictions
+            // For now, we'll leave it as 0 until we fetch from contract
+          } else if (isExpired && !isFinalized) {
+            // Event ended but not finalized - still pending results
+            result = "pending";
           }
 
           return {
@@ -147,9 +157,9 @@ export function useUserProfile(address: `0x${string}` | undefined) {
                 : "",
             result,
             prediction: "View Details", // TODO: Fetch actual predictions
-            points: 0, // TODO: Calculate from user predictions
+            points,
           };
-        }
+        },
       );
   }, [eventsData, address]);
 
