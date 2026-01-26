@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/oracle/auto-finalize",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
