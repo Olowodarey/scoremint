@@ -76,14 +76,14 @@ export async function POST() {
         matchId: m.matchId,
         homeScore: m.homeScore,
         awayScore: m.awayScore,
-      }))
+      })),
     );
 
     // 4. Update JSON storage
     for (const match of toSettle) {
       markMatchAsSettled(match.apiFixtureId, match.homeScore, match.awayScore);
       console.log(
-        `✓ Settled match ${match.matchId}: ${match.homeTeam} ${match.homeScore}-${match.awayScore} ${match.awayTeam}`
+        `✓ Settled match ${match.matchId}: ${match.homeTeam} ${match.homeScore}-${match.awayScore} ${match.awayTeam}`,
       );
     }
 
@@ -104,7 +104,7 @@ export async function POST() {
         error: "Failed to settle matches",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -121,6 +121,17 @@ async function fetchFixtureResult(fixtureId: number) {
   }
 
   const data = await response.json();
+
+  // Check for API errors
+  const hasErrors =
+    data.errors &&
+    (Array.isArray(data.errors)
+      ? data.errors.length > 0
+      : Object.keys(data.errors).length > 0);
+
+  if (hasErrors) {
+    throw new Error(`API-Football error: ${JSON.stringify(data.errors)}`);
+  }
 
   if (!data.response || data.response.length === 0) {
     throw new Error(`Fixture ${fixtureId} not found`);

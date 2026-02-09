@@ -91,11 +91,13 @@ export interface Fixture {
 export interface ApiFootballResponse<T> {
   get: string;
   parameters: Record<string, string | number>;
-  errors: Array<{
-    time?: string;
-    bug?: string;
-    report?: string;
-  }>;
+  errors:
+    | Record<string, string>
+    | Array<{
+        time?: string;
+        bug?: string;
+        report?: string;
+      }>;
   results: number;
   paging?: {
     current: number;

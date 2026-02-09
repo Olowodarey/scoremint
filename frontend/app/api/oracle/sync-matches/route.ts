@@ -46,6 +46,22 @@ export async function POST(request: Request) {
     }
 
     const data = await response.json();
+
+    // Check for API errors
+    const hasErrors =
+      data.errors &&
+      (Array.isArray(data.errors)
+        ? data.errors.length > 0
+        : Object.keys(data.errors).length > 0);
+
+    if (hasErrors) {
+      console.error("API-Football returned errors:", data.errors);
+      return NextResponse.json(
+        { error: "API-Football returned an error", details: data.errors },
+        { status: 500 },
+      );
+    }
+
     const fixtures: Fixture[] = data.response || [];
 
     if (fixtures.length === 0) {
@@ -86,7 +102,7 @@ export async function POST(request: Request) {
           contractMatchId,
           fixture.teams.home.name,
           fixture.teams.away.name,
-          fixture.fixture.timestamp
+          fixture.fixture.timestamp,
         );
 
         created.push({
@@ -97,12 +113,12 @@ export async function POST(request: Request) {
         });
 
         console.log(
-          `✓ Created match ${contractMatchId} for fixture ${fixture.fixture.id}`
+          `✓ Created match ${contractMatchId} for fixture ${fixture.fixture.id}`,
         );
       } catch (error) {
         console.error(
           `Error creating match for fixture ${fixture.fixture.id}:`,
-          error
+          error,
         );
         skipped.push({
           fixtureId: fixture.fixture.id,
@@ -126,7 +142,7 @@ export async function POST(request: Request) {
         error: "Failed to sync matches",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -51,7 +51,9 @@ interface LeagueResponse {
 interface ApiFootballResponse<T> {
   get: string;
   parameters: Record<string, string | number>;
-  errors: Array<{ time?: string; bug?: string; report?: string }>;
+  errors:
+    | Record<string, string>
+    | Array<{ time?: string; bug?: string; report?: string }>;
   results: number;
   response: T[];
 }
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
   if (!API_KEY) {
     return NextResponse.json(
       { error: "API_FOOTBALL_KEY is not configured" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -117,23 +119,30 @@ export async function GET(request: NextRequest) {
       if (response.status === 429) {
         return NextResponse.json(
           { error: "Rate limit exceeded. Please try again later." },
-          { status: 429 }
+          { status: 429 },
         );
       }
 
       return NextResponse.json(
         { error: "Failed to fetch leagues from API-Football" },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
     const data: ApiFootballResponse<LeagueResponse> = await response.json();
 
-    if (data.errors && data.errors.length > 0) {
+    // Check for API errors
+    const hasErrors =
+      data.errors &&
+      (Array.isArray(data.errors)
+        ? data.errors.length > 0
+        : Object.keys(data.errors).length > 0);
+
+    if (hasErrors) {
       console.error("API-Football returned errors:", data.errors);
       return NextResponse.json(
         { error: "API-Football returned an error", details: data.errors },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -169,7 +178,7 @@ export async function GET(request: NextRequest) {
         error: "Internal server error",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

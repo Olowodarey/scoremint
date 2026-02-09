@@ -31,7 +31,7 @@ function getCacheKey(params: URLSearchParams): string {
 
 function transformFixture(fixture: Fixture): SimpleFixture {
   const isLive = ["1H", "2H", "HT", "ET", "BT", "P", "LIVE"].includes(
-    fixture.fixture.status.short
+    fixture.fixture.status.short,
   );
 
   return {
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
   if (!API_KEY) {
     return NextResponse.json(
       { error: "API_FOOTBALL_KEY is not configured" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -129,24 +129,30 @@ export async function GET(request: NextRequest) {
       if (response.status === 429) {
         return NextResponse.json(
           { error: "Rate limit exceeded. Please try again later." },
-          { status: 429 }
+          { status: 429 },
         );
       }
 
       return NextResponse.json(
         { error: "Failed to fetch fixtures from API-Football" },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
     const data: ApiFootballResponse<Fixture> = await response.json();
 
     // Check for API errors
-    if (data.errors && data.errors.length > 0) {
+    const hasErrors =
+      data.errors &&
+      (Array.isArray(data.errors)
+        ? data.errors.length > 0
+        : Object.keys(data.errors).length > 0);
+
+    if (hasErrors) {
       console.error("API-Football returned errors:", data.errors);
       return NextResponse.json(
         { error: "API-Football returned an error", details: data.errors },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -171,7 +177,7 @@ export async function GET(request: NextRequest) {
         error: "Internal server error",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
